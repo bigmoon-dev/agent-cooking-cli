@@ -1,0 +1,29 @@
+name: profile_validate_fails
+description: profile validate should fail on invalid profile.yaml
+
+steps:
+  - type: run
+    args: ["init", "--profile", "embedded_system_v1"]
+    expect_exit: 0
+
+  - type: write_file
+    path: "triage/profile.yaml"
+    content: |
+      profile_id: "bad"
+      rounds:
+        - id: 0
+          fields: "not-a-list"
+
+  - type: run
+    args: ["profile", "validate"]
+    expect_exit: 2
+  - type: assert_last_stdout_contains
+    contains: "ERROR: rounds[0].fields"
+
+  - type: run
+    args: ["round", "run", "0", "--no-editor"]
+    input: |
+      x
+    expect_exit: 2
+  - type: assert_last_stdout_contains
+    contains: "Invalid profile"

@@ -54,13 +54,77 @@ def _load_profile_yaml(profile_id: str) -> dict:
     return data
 
 
+def _validate_profile(profile: dict) -> List[str]:
+    errors: List[str] = []
+    if not isinstance(profile, dict):
+        return ["profile must be a YAML mapping"]
+
+    pid = profile.get("profile_id")
+    if not isinstance(pid, str) or not pid.strip():
+        errors.append("profile_id: required non-empty string")
+
+    rounds = profile.get("rounds")
+    if not isinstance(rounds, list) or not rounds:
+        errors.append("rounds: required non-empty list")
+        return errors
+
+    seen_round_ids: set[int] = set()
+    for i, r in enumerate(rounds):
+        if not isinstance(r, dict):
+            errors.append(f"rounds[{i}]: must be a mapping")
+            continue
+        rid = r.get("id")
+        if not isinstance(rid, int):
+            errors.append(f"rounds[{i}].id: required int")
+            continue
+        if rid < 0:
+            errors.append(f"rounds[{i}].id: must be >= 0")
+        if rid in seen_round_ids:
+            errors.append(f"rounds[{i}].id: duplicate id {rid}")
+        seen_round_ids.add(rid)
+
+        fields = r.get("fields")
+        if not isinstance(fields, list) or not fields:
+            errors.append(f"rounds[{i}].fields: required non-empty list")
+            continue
+        for j, f in enumerate(fields):
+            if not isinstance(f, str) or not f.strip():
+                errors.append(f"rounds[{i}].fields[{j}]: must be non-empty string")
+
+    req_ev = profile.get("required_evidence")
+    if req_ev is not None and not isinstance(req_ev, list):
+        errors.append("required_evidence: must be a list if present")
+    if isinstance(req_ev, list):
+        for j, e in enumerate(req_ev):
+            if not isinstance(e, str) or not e.strip():
+                errors.append(f"required_evidence[{j}]: must be non-empty string")
+
+    tax = profile.get("direction_taxonomy")
+    if tax is not None and not isinstance(tax, list):
+        errors.append("direction_taxonomy: must be a list if present")
+    if isinstance(tax, list):
+        for j, t in enumerate(tax):
+            if not isinstance(t, str) or not t.strip():
+                errors.append(f"direction_taxonomy[{j}]: must be non-empty string")
+
+    return errors
+
+
+def _require_valid_profile(profile: dict) -> dict:
+    errs = _validate_profile(profile)
+    if errs:
+        msg = "Invalid profile:\n" + "\n".join(["- " + e for e in errs])
+        raise typer.BadParameter(msg)
+    return profile
+
+
 def _load_active_profile(triage_dir: Path) -> dict:
     """Load triage/profile.yaml if present; else return empty."""
 
     p = triage_dir / "profile.yaml"
     if not p.exists():
         return {}
-    return _load_yaml(p)
+    return _require_valid_profile(_load_yaml(p))
 
 
 def _repo_root() -> Path:
@@ -389,7 +453,7 @@ def init(
         created += 1
 
     if profile.strip():
-        prof = _load_profile_yaml(profile.strip())
+        prof = _require_valid_profile(_load_profile_yaml(profile.strip()))
         prof_path = tdir / "profile.yaml"
         if (not prof_path.exists()) or force:
             _dump_yaml(prof_path, prof)
@@ -423,6 +487,37 @@ def profile_show(profile_id: str = typer.Argument(...)) -> None:
 
     prof = _load_profile_yaml(profile_id)
     typer.echo(yaml.safe_dump(prof, sort_keys=False, allow_unicode=False))
+
+
+@profile_app.command("validate")
+def profile_validate(
+    profile_id: Optional[str] = typer.Argument(None, help="Built-in profile id to validate"),
+    path: Optional[Path] = typer.Option(None, exists=True, dir_okay=False, help="Path to a profile.yaml to validate"),
+) -> None:
+    """Validate a profile (built-in or a profile.yaml file)."""
+
+    if profile_id is None and path is None:
+        root = _repo_root()
+        tdir = _triage_dir(root)
+        path = tdir / "profile.yaml"
+        if not path.exists():
+            raise typer.BadParameter("No profile specified and triage/profile.yaml not found")
+
+    if profile_id is not None and path is not None:
+        raise typer.BadParameter("Specify either profile_id or --path, not both")
+
+    if profile_id is not None:
+        prof = _load_profile_yaml(profile_id)
+    else:
+        assert path is not None
+        prof = _load_yaml(path)
+
+    errs = _validate_profile(prof)
+    if errs:
+        for e in errs:
+            typer.echo(f"ERROR: {e}")
+        raise typer.Exit(code=2)
+    typer.echo("OK: profile valid")
 
 
 round_app = typer.Typer(add_completion=False)
