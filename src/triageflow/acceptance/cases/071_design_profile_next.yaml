@@ -45,4 +45,4 @@ steps:
     args: ["next"]
     expect_exit: 0
   - type: assert_last_stdout_contains
-    contains: "Next: evidence add --type cmd"
+    contains: "Next: evidence add-text"

@@ -907,8 +907,8 @@ def evidence_add(
     """Add an evidence snippet and register an EID."""
 
     etype_norm = etype.strip().lower()
-    if etype_norm not in {"log", "code", "cmd"}:
-        raise typer.BadParameter("--type must be one of: log, code, cmd")
+    if etype_norm not in {"log", "code", "cmd", "text"}:
+        raise typer.BadParameter("--type must be one of: log, code, cmd, text")
 
     root = _repo_root()
     tdir = _triage_dir(root)
@@ -925,7 +925,7 @@ def evidence_add(
     else:
         snippet = typer.edit("") or ""
 
-    folder = tdir / "evidence" / etype_norm
+    folder = tdir / "evidence" / ("cmd" if etype_norm == "text" else etype_norm)
     fname = f"{eid}_{etype_norm}.txt"
     out_path = folder / fname
     header = (
@@ -940,6 +940,25 @@ def evidence_add(
 
     _append_evidence_index(tdir, eid=eid, etype=etype_norm, source=source, note=note)
     typer.echo(f"Added {eid}: {out_path}")
+
+
+@evidence_app.command("add-text")
+def evidence_add_text(
+    source: str = typer.Option("", help="Source description (optional)"),
+    note: str = typer.Option(..., help="What it shows (fact only)"),
+    content: Optional[str] = typer.Option(None, help="Inline text content"),
+    content_file: Optional[Path] = typer.Option(None, exists=True, dir_okay=False, help="File containing text"),
+) -> None:
+    """Add a generic text evidence snippet (stored under evidence/cmd)."""
+
+    src = source.strip() or "text"
+    evidence_add(
+        etype="text",
+        source=src,
+        note=note,
+        content=content,
+        content_file=content_file,
+    )
 
 
 @evidence_app.command("add-log")
@@ -1669,7 +1688,7 @@ def next_steps() -> None:
                 hint = "panic"
             typer.echo(f"Next: evidence add-log --log-path <uart.log> --pattern {hint}")
         else:
-            typer.echo("Next: evidence add --type cmd --source <source> --note <fact> --content <text>")
+            typer.echo("Next: evidence add-text --source <source> --note <fact> --content <text>")
         raise typer.Exit(code=0)
 
     facts_path = tdir / "facts.md"

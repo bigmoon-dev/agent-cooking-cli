@@ -1,0 +1,24 @@
+name: evidence_add_text
+description: evidence add-text should register an EID and be usable in facts
+
+steps:
+  - type: run
+    args: ["init", "--profile", "design_system_v1"]
+    expect_exit: 0
+
+  - type: run
+    args: ["evidence", "add-text", "--source", "doc", "--note", "PoC shows 2x speed", "--content", "bench: p95 100->50ms"]
+    expect_exit: 0
+
+  - type: capture
+    from_file: "triage/evidence/index.md"
+    regex: "\\b(E\\d{3})\\b"
+    var: eid
+
+  - type: run
+    args: ["facts", "add", "--text", "bench improved", "--evidence", "${eid}"]
+    expect_exit: 0
+
+  - type: run
+    args: ["validate"]
+    expect_exit: 0
