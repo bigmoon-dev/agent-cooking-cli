@@ -32,4 +32,5 @@ def test_wheel_includes_profiles_and_acceptance_cases(tmp_path: Path):
     # Verify data files exist in installed package
     pkg_dir = target / "triageflow"
     assert (pkg_dir / "profiles" / "embedded_system_v1.yaml").exists()
+    assert (pkg_dir / "profiles" / "design_system_v1.yaml").exists()
     assert (pkg_dir / "acceptance" / "cases" / "001_golden_path_embedded.yaml").exists()

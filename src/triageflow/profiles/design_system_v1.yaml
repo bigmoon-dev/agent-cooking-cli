@@ -1,0 +1,34 @@
+profile_id: design_system_v1
+description: "Software design workflow (decision records backed by evidence)."
+
+required_evidence: []
+
+direction_taxonomy:
+  - ARCHITECTURE
+  - API_CONTRACT
+  - PERFORMANCE
+  - SECURITY_PRIVACY
+  - RELIABILITY
+  - COST
+  - DX
+  - OPERATIONS
+  - MIGRATION
+
+rounds:
+  - id: 0
+    fields:
+      - title
+      - problem_statement
+      - goals
+      - non_goals
+      - constraints
+      - stakeholders
+      - success_metrics
+  - id: 1
+    fields:
+      - current_state
+      - options_considered
+      - decision
+      - rationale
+      - risks
+      - validation_plan

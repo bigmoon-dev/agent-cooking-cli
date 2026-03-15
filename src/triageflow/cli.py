@@ -443,6 +443,27 @@ def _get_profile_round_fields(profile: dict, round_id: int) -> List[str]:
     return []
 
 
+def _profile_required_evidence(profile: dict) -> List[str]:
+    v = profile.get("required_evidence")
+    if isinstance(v, list):
+        return [str(x) for x in v]
+    return []
+
+
+def _is_missing_case_field(case: dict, key: str) -> bool:
+    if key not in case:
+        return True
+    v = case.get(key)
+    if v is None:
+        return True
+    if isinstance(v, str):
+        return not v.strip()
+    if isinstance(v, list):
+        return len(v) == 0
+    # bool/number/dict treated as present
+    return False
+
+
 def _case_set(data: dict, key: str, value) -> None:
     if value is None:
         return
@@ -1524,34 +1545,31 @@ def next_steps() -> None:
         raise typer.Exit(code=0)
 
     case = _load_yaml(case_path)
-    # If round 0 core fields missing
-    required0 = ["symptom", "impact_scope", "firmware_version", "hw_revision", "repro_steps", "time_window"]
-    if any(not str(case.get(k) or "").strip() for k in required0):
+    profile = _load_active_profile(tdir)
+
+    required0 = _get_profile_round_fields(profile, 0)
+    if required0 and any(_is_missing_case_field(case, k) for k in required0):
         typer.echo("Next: round run 0")
         raise typer.Exit(code=0)
-    # If round 1 core fields missing
-    required1 = [
-        "uart_log_format",
-        "can_enable_more_logs",
-        "capabilities_phone_side",
-        "capabilities_power_measure",
-        "capabilities_bt_snoop",
-        "capabilities_pmic_dump",
-        "anchor_keywords",
-    ]
-    if any(case.get(k) is None for k in required1):
+
+    required1 = _get_profile_round_fields(profile, 1)
+    if required1 and any(_is_missing_case_field(case, k) for k in required1):
         typer.echo("Next: round run 1")
         raise typer.Exit(code=0)
 
     # If no evidence yet
     index_path = tdir / "evidence" / "index.md"
     if not index_path.exists() or not re.search(r"\bE\d{3}\b", _read_text_if_exists(index_path)):
-        anchors = case.get("anchor_keywords")
-        if isinstance(anchors, list) and anchors:
-            hint = anchors[0]
+        required_ev = _profile_required_evidence(profile)
+        if "uart_log" in required_ev:
+            anchors = case.get("anchor_keywords")
+            if isinstance(anchors, list) and anchors:
+                hint = anchors[0]
+            else:
+                hint = "panic"
+            typer.echo(f"Next: evidence add-log --log-path <uart.log> --pattern {hint}")
         else:
-            hint = "panic"
-        typer.echo(f"Next: evidence add-log --log-path <uart.log> --pattern {hint}")
+            typer.echo("Next: evidence add --type cmd --source <source> --note <fact> --content <text>")
         raise typer.Exit(code=0)
 
     facts_path = tdir / "facts.md"
