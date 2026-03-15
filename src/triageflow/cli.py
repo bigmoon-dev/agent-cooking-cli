@@ -868,7 +868,12 @@ def round_run(
                 typer.echo(f"Current anchors: {anchors}")
             new_anchors: List[str] = []
             while True:
-                s = typer.prompt("anchor", default="", show_default=False).strip()
+                try:
+                    s = typer.prompt("anchor", default="", show_default=False)
+                except (EOFError, click.Abort):
+                    # Treat exhausted stdin as "finish anchors".
+                    break
+                s = str(s).strip()
                 if not s:
                     break
                 new_anchors.append(s)
