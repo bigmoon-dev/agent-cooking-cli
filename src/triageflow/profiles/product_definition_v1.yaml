@@ -1,0 +1,32 @@
+profile_id: product_definition_v1
+description: "Product definition workflow (evidence-backed requirements and decisions)."
+
+required_evidence: []
+
+direction_taxonomy:
+  - PROBLEM_DISCOVERY
+  - USER_RESEARCH
+  - METRICS_ANALYTICS
+  - REQUIREMENTS
+  - RISK_COMPLIANCE
+  - GO_TO_MARKET
+
+rounds:
+  - id: 0
+    fields:
+      - title
+      - target_users
+      - problem_statement
+      - goals
+      - non_goals
+      - constraints
+      - success_metrics
+  - id: 1
+    fields:
+      - current_state
+      - insights_evidence
+      - options_considered
+      - decision
+      - rollout_plan
+      - risks
+      - validation_plan
