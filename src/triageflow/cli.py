@@ -1708,7 +1708,8 @@ def acceptance_run() -> None:
 
     from typer.testing import CliRunner
 
-    runner = CliRunner()
+    # Mix stderr into stdout so YAML assertions can see error messages.
+    runner = CliRunner(mix_stderr=True)
 
     cases_dir = Path(__file__).resolve().parent / "acceptance" / "cases"
     case_files = sorted(cases_dir.glob("*.yaml"))
