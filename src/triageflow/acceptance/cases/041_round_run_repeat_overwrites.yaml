@@ -1,0 +1,33 @@
+name: round_run_repeat_overwrites
+description: running round run 0 twice overwrites values in case.yaml
+
+steps:
+  - type: run
+    args: ["init", "--profile", "embedded_system_v1"]
+    expect_exit: 0
+
+  - type: run
+    args: ["round", "run", "0", "--no-editor"]
+    input: |
+      first symptom
+      scope1
+      fw1
+      hw1
+      repro1
+      tw1
+    expect_exit: 0
+
+  - type: run
+    args: ["round", "run", "0", "--no-editor"]
+    input: |
+      second symptom
+      scope2
+      fw2
+      hw2
+      repro2
+      tw2
+    expect_exit: 0
+
+  - type: assert_file_contains
+    path: "triage/case.yaml"
+    contains: "symptom: second symptom"

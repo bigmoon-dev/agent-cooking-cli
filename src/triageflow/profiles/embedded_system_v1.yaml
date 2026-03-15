@@ -1,0 +1,57 @@
+profile_id: embedded_system_v1
+description: "Embedded firmware/system triage (stability/power/bt/charging). UART log required."
+
+required_evidence:
+  - uart_log
+
+direction_taxonomy:
+  - POWER_SLEEP
+  - POWER_WAKE
+  - CLOCK_PLL
+  - BT_LINK_LAYER
+  - BT_PROFILE_AUDIO
+  - CHARGING_PATH
+  - PMIC_REGULATOR
+  - RTOS_SCHED
+  - ISR_LATENCY
+  - MEMORY_HEAP
+  - THERMAL
+  - STORAGE_FLASH
+  - AUDIO_DSP
+
+rounds:
+  - id: 0
+    fields:
+      - symptom
+      - impact_scope
+      - firmware_version
+      - hw_revision
+      - repro_steps
+      - time_window
+  - id: 1
+    fields:
+      - uart_log_format
+      - can_enable_more_logs
+      - capabilities_phone_side
+      - capabilities_power_measure
+      - capabilities_bt_snoop
+      - capabilities_pmic_dump
+      - anchor_keywords
+
+uart_anchors_default:
+  - "assert"
+  - "panic"
+  - "hardfault"
+  - "watchdog"
+  - "reset"
+  - "reboot"
+  - "exception"
+  - "stack"
+  - "timeout"
+  - "disconnect"
+  - "sleep"
+  - "wakeup"
+  - "charge"
+  - "charging"
+  - "vbus"
+  - "vbat"

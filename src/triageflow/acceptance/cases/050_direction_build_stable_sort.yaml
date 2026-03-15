@@ -1,0 +1,59 @@
+name: direction_build_stable_sort
+description: direction-build ordering should be deterministic when scores tie
+
+fixtures:
+  - path: uart.log
+    content: |
+      panic
+
+steps:
+  - type: run
+    args: ["init", "--profile", "embedded_system_v1"]
+    expect_exit: 0
+
+  - type: run
+    args:
+      - "evidence"
+      - "add-log"
+      - "--log-path"
+      - "${root}/uart.log"
+      - "--pattern"
+      - "panic"
+      - "--before"
+      - "0"
+      - "--after"
+      - "0"
+      - "--max-matches"
+      - "1"
+      - "--note"
+      - "panic line"
+    expect_exit: 0
+
+  - type: capture
+    from_file: "triage/evidence/index.md"
+    regex: "\\b(E\\d{3})\\b"
+    var: eid
+
+  # Write hypotheses with H002 appearing before H001 but equal score.
+  - type: write_file
+    path: "triage/hypotheses.md"
+    content: |
+      # Hypotheses
+
+      H002 (Status: Open | Confidence: Medium)
+      Hypothesis: second
+      Evidence: (${eid})
+      Test:
+
+      H001 (Status: Open | Confidence: Medium)
+      Hypothesis: first
+      Evidence: (${eid})
+      Test:
+
+  - type: run
+    args: ["direction-build", "--overwrite"]
+    expect_exit: 0
+
+  - type: assert_file_contains
+    path: "triage/directions.md"
+    contains: "DIR-1 (From: H001"

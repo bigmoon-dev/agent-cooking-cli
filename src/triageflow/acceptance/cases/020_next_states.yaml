@@ -1,0 +1,63 @@
+name: next_states
+description: next command guides golden path based on workspace state
+
+fixtures:
+  - path: uart.log
+    content: |
+      panic
+
+steps:
+  # fresh workspace: next -> init
+  - type: run
+    args: ["next"]
+    expect_exit: 0
+  - type: assert_last_stdout_contains
+    contains: "Next: init"
+
+  - type: run
+    args: ["init", "--profile", "embedded_system_v1"]
+    expect_exit: 0
+
+  # after init: next -> round run 0
+  - type: run
+    args: ["next"]
+    expect_exit: 0
+  - type: assert_last_stdout_contains
+    contains: "Next: round run 0"
+
+  - type: run
+    args: ["round", "run", "0", "--no-editor"]
+    input: |
+      reboot
+      affects some
+      fw-x
+      hw-y
+      repro
+      now
+    expect_exit: 0
+
+  # after round0: next -> round run 1
+  - type: run
+    args: ["next"]
+    expect_exit: 0
+  - type: assert_last_stdout_contains
+    contains: "Next: round run 1"
+
+  - type: run
+    args: ["round", "run", "1", "--no-editor"]
+    input: |
+      mixed
+      n
+      unknown
+      unknown
+      unknown
+      unknown
+      
+    expect_exit: 0
+
+  # after round1 and no evidence: next -> evidence add-log ...
+  - type: run
+    args: ["next"]
+    expect_exit: 0
+  - type: assert_last_stdout_contains
+    contains: "Next: evidence add-log"

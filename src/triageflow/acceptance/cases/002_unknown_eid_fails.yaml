@@ -1,0 +1,11 @@
+name: unknown_eid_fails
+description: facts add must fail for unknown evidence id
+
+steps:
+  - type: run
+    args: ["init", "--profile", "embedded_system_v1"]
+    expect_exit: 0
+
+  - type: run
+    args: ["facts", "add", "--text", "x", "--evidence", "E999"]
+    expect_exit: 2

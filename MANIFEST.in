@@ -1,0 +1,2 @@
+recursive-include src/triageflow/profiles *.yaml
+recursive-include src/triageflow/acceptance/cases *.yaml

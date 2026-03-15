@@ -1,0 +1,16 @@
+name: round_run_input_exhausted
+description: round run should fail with clear error when stdin is exhausted
+
+steps:
+  - type: run
+    args: ["init", "--profile", "embedded_system_v1"]
+    expect_exit: 0
+
+  - type: run
+    args: ["round", "run", "0", "--no-editor"]
+    input: |
+      only-one-line
+    expect_exit: 2
+
+  - type: assert_last_stdout_contains
+    contains: "Input exhausted"

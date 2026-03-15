@@ -1,0 +1,78 @@
+name: direction_build_top_n
+description: direction-build respects --top-n
+
+fixtures:
+  - path: uart.log
+    content: |
+      panic
+
+steps:
+  - type: run
+    args: ["init", "--profile", "embedded_system_v1"]
+    expect_exit: 0
+
+  - type: run
+    args:
+      - "evidence"
+      - "add-log"
+      - "--log-path"
+      - "${root}/uart.log"
+      - "--pattern"
+      - "panic"
+      - "--before"
+      - "0"
+      - "--after"
+      - "0"
+      - "--max-matches"
+      - "1"
+      - "--note"
+      - "panic line"
+    expect_exit: 0
+
+  - type: run
+    args:
+      - "evidence"
+      - "add"
+      - "--type"
+      - "cmd"
+      - "--source"
+      - "cmd:dummy"
+      - "--note"
+      - "dummy cmd output"
+      - "--content"
+      - "ok"
+    expect_exit: 0
+
+  - type: run
+    args:
+      - "hypotheses"
+      - "add"
+      - "--hypothesis"
+      - "higher score (two eids)"
+      - "--evidence"
+      - "E001"
+      - "--evidence"
+      - "E002"
+    expect_exit: 0
+
+  - type: run
+    args:
+      - "hypotheses"
+      - "add"
+      - "--hypothesis"
+      - "lower score (one eid)"
+      - "--evidence"
+      - "E001"
+    expect_exit: 0
+
+  - type: run
+    args: ["direction-build", "--overwrite", "--top-n", "1"]
+    expect_exit: 0
+
+  - type: assert_file_contains
+    path: "triage/directions.md"
+    contains: "DIR-1"
+
+  - type: assert_file_not_contains
+    path: "triage/directions.md"
+    contains: "DIR-2"

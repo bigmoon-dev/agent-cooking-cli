@@ -1,0 +1,11 @@
+name: direction_build_requires_overwrite
+description: direction-build should require --overwrite when directions.md already exists
+
+steps:
+  - type: run
+    args: ["init", "--profile", "embedded_system_v1"]
+    expect_exit: 0
+
+  - type: run
+    args: ["direction-build"]
+    expect_exit: 2

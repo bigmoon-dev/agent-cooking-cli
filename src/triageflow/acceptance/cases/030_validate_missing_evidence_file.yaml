@@ -1,0 +1,52 @@
+name: validate_missing_evidence_file
+description: validate must fail if index references an EID but its evidence file is missing
+
+fixtures:
+  - path: uart.log
+    content: |
+      panic
+
+steps:
+  - type: run
+    args: ["init", "--profile", "embedded_system_v1"]
+    expect_exit: 0
+
+  - type: run
+    args:
+      - "evidence"
+      - "add-log"
+      - "--log-path"
+      - "${root}/uart.log"
+      - "--pattern"
+      - "panic"
+      - "--before"
+      - "0"
+      - "--after"
+      - "0"
+      - "--max-matches"
+      - "1"
+      - "--note"
+      - "panic line"
+    expect_exit: 0
+
+  - type: capture
+    from_file: "triage/evidence/index.md"
+    regex: "\\b(E\\d{3})\\b"
+    var: eid
+
+  - type: run
+    args:
+      - "hypotheses"
+      - "add"
+      - "--hypothesis"
+      - "something"
+      - "--evidence"
+      - "${eid}"
+    expect_exit: 0
+
+  - type: delete_file
+    path: "triage/evidence/log/${eid}_log.txt"
+
+  - type: run
+    args: ["validate"]
+    expect_exit: 2

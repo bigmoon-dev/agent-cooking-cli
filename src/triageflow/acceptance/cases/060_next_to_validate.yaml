@@ -1,0 +1,107 @@
+name: next_to_validate
+description: next should guide the full golden path up to validate
+
+fixtures:
+  - path: uart.log
+    content: |
+      boot
+      panic: watchdog
+
+steps:
+  - type: run
+    args: ["next"]
+    expect_exit: 0
+  - type: assert_last_stdout_contains
+    contains: "Next: init"
+
+  - type: run
+    args: ["init", "--profile", "embedded_system_v1"]
+    expect_exit: 0
+  - type: run
+    args: ["next"]
+    expect_exit: 0
+  - type: assert_last_stdout_contains
+    contains: "Next: round run 0"
+
+  - type: run
+    args: ["round", "run", "0", "--no-editor"]
+    input: |
+      reboot
+      affects
+      fw
+      hw
+      repro
+      tw
+    expect_exit: 0
+  - type: run
+    args: ["next"]
+    expect_exit: 0
+  - type: assert_last_stdout_contains
+    contains: "Next: round run 1"
+
+  - type: run
+    args: ["round", "run", "1", "--no-editor"]
+    input: |
+      mixed
+      n
+      unknown
+      unknown
+      unknown
+      unknown
+      
+    expect_exit: 0
+  - type: run
+    args: ["next"]
+    expect_exit: 0
+  - type: assert_last_stdout_contains
+    contains: "Next: evidence add-log"
+
+  - type: run
+    args:
+      - "evidence"
+      - "add-log"
+      - "--log-path"
+      - "${root}/uart.log"
+      - "--pattern"
+      - "panic"
+      - "--before"
+      - "0"
+      - "--after"
+      - "0"
+      - "--max-matches"
+      - "1"
+      - "--note"
+      - "panic line"
+    expect_exit: 0
+  - type: run
+    args: ["next"]
+    expect_exit: 0
+  - type: assert_last_stdout_contains
+    contains: "Next: facts add"
+
+  - type: capture
+    from_file: "triage/evidence/index.md"
+    regex: "\\b(E\\d{3})\\b"
+    var: eid
+
+  - type: run
+    args: ["facts", "add", "--text", "panic observed", "--evidence", "${eid}"]
+    expect_exit: 0
+  - type: run
+    args: ["next"]
+    expect_exit: 0
+  - type: assert_last_stdout_contains
+    contains: "Next: direction-build"
+
+  - type: run
+    args: ["hypotheses", "add", "--hypothesis", "watchdog reset", "--evidence", "${eid}"]
+    expect_exit: 0
+
+  - type: run
+    args: ["direction-build", "--overwrite", "--top-n", "1"]
+    expect_exit: 0
+  - type: run
+    args: ["next"]
+    expect_exit: 0
+  - type: assert_last_stdout_contains
+    contains: "Next: validate"

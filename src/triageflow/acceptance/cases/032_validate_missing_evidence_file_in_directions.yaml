@@ -1,0 +1,50 @@
+name: validate_missing_evidence_file_in_directions
+description: validate must fail if directions reference a missing evidence file
+
+fixtures:
+  - path: uart.log
+    content: |
+      panic
+
+steps:
+  - type: run
+    args: ["init", "--profile", "embedded_system_v1"]
+    expect_exit: 0
+
+  - type: run
+    args:
+      - "evidence"
+      - "add-log"
+      - "--log-path"
+      - "${root}/uart.log"
+      - "--pattern"
+      - "panic"
+      - "--before"
+      - "0"
+      - "--after"
+      - "0"
+      - "--max-matches"
+      - "1"
+      - "--note"
+      - "panic line"
+    expect_exit: 0
+
+  - type: capture
+    from_file: "triage/evidence/index.md"
+    regex: "\\b(E\\d{3})\\b"
+    var: eid
+
+  - type: write_file
+    path: "triage/directions.md"
+    content: |
+      # Directions
+      DIR-1 (Confidence: Medium)
+      Direction: test
+      Evidence chain: (${eid})
+
+  - type: delete_file
+    path: "triage/evidence/log/${eid}_log.txt"
+
+  - type: run
+    args: ["validate"]
+    expect_exit: 2

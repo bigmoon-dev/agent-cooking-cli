@@ -1,0 +1,42 @@
+name: evidence_add_log_max_matches
+description: evidence add-log respects --max-matches
+
+fixtures:
+  - path: uart.log
+    content: |
+      panic one
+      x
+      panic two
+      y
+      panic three
+
+steps:
+  - type: run
+    args: ["init", "--profile", "embedded_system_v1"]
+    expect_exit: 0
+
+  - type: run
+    args:
+      - "evidence"
+      - "add-log"
+      - "--log-path"
+      - "${root}/uart.log"
+      - "--pattern"
+      - "panic"
+      - "--before"
+      - "0"
+      - "--after"
+      - "0"
+      - "--max-matches"
+      - "2"
+      - "--note"
+      - "panic lines"
+    expect_exit: 0
+
+  - type: assert_file_contains
+    path: "triage/evidence/index.md"
+    contains: "E001"
+
+  - type: assert_file_contains
+    path: "triage/evidence/index.md"
+    contains: "E002"

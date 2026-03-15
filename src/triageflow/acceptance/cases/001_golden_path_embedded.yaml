@@ -1,0 +1,94 @@
+name: golden_path_embedded
+description: Golden path for embedded_system_v1
+
+fixtures:
+  - path: uart.log
+    content: |
+      boot
+      sleep enter
+      panic: watchdog
+      stack: ...
+      reboot
+
+steps:
+  - type: run
+    args: ["init", "--profile", "embedded_system_v1"]
+    expect_exit: 0
+
+  - type: run
+    args: ["next"]
+    expect_exit: 0
+
+  - type: run
+    args: ["round", "run", "0", "--no-editor"]
+    input: |
+      reboot during pairing
+      affects all units
+      fw-abc123
+      hw-rev-a
+      open lid, start pairing, wait 10s
+      2026-03-15 10:00-10:05
+    expect_exit: 0
+
+  - type: run
+    args: ["round", "run", "1", "--no-editor"]
+    input: |
+      mixed
+      n
+      unknown
+      unknown
+      unknown
+      unknown
+      
+    expect_exit: 0
+
+  - type: run
+    args:
+      - "evidence"
+      - "add-log"
+      - "--log-path"
+      - "${root}/uart.log"
+      - "--pattern"
+      - "panic"
+      - "--before"
+      - "1"
+      - "--after"
+      - "2"
+      - "--max-matches"
+      - "1"
+      - "--note"
+      - "panic window"
+    expect_exit: 0
+
+  - type: capture
+    from_file: "triage/evidence/index.md"
+    regex: "\\b(E\\d{3})\\b"
+    var: eid
+
+  - type: run
+    args: ["facts", "add", "--text", "panic observed in uart", "--evidence", "${eid}"]
+    expect_exit: 0
+
+  - type: run
+    args:
+      - "hypotheses"
+      - "add"
+      - "--hypothesis"
+      - "watchdog reset triggers reboot"
+      - "--evidence"
+      - "${eid}"
+      - "--test"
+      - "enable wdt reason print + dump reset cause register"
+    expect_exit: 0
+
+  - type: run
+    args: ["direction-build", "--overwrite"]
+    expect_exit: 0
+
+  - type: run
+    args: ["validate"]
+    expect_exit: 0
+
+  - type: assert_file_contains
+    path: "triage/directions.md"
+    contains: "DIR-1"

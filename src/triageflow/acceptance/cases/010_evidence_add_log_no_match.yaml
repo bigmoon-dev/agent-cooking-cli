@@ -1,0 +1,39 @@
+name: evidence_add_log_no_match
+description: evidence add-log must fail with no match and not create EIDs
+
+fixtures:
+  - path: uart.log
+    content: |
+      boot
+      hello
+
+steps:
+  - type: run
+    args: ["init", "--profile", "embedded_system_v1"]
+    expect_exit: 0
+
+  - type: run
+    args:
+      - "evidence"
+      - "add-log"
+      - "--log-path"
+      - "${root}/uart.log"
+      - "--pattern"
+      - "panic"
+      - "--before"
+      - "5"
+      - "--after"
+      - "5"
+      - "--max-matches"
+      - "1"
+      - "--note"
+      - "no match"
+    expect_exit: 1
+
+  - type: assert_file_contains
+    path: "triage/evidence/index.md"
+    contains: "| Evidence ID |"
+
+  - type: assert_file_not_contains
+    path: "triage/evidence/index.md"
+    contains: "E001"

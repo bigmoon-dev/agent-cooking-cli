@@ -1,0 +1,44 @@
+name: validate_fails_on_speculation
+description: validate must fail when facts contain speculation words
+
+fixtures:
+  - path: uart.log
+    content: |
+      boot
+      panic: watchdog
+
+steps:
+  - type: run
+    args: ["init", "--profile", "embedded_system_v1"]
+    expect_exit: 0
+
+  - type: run
+    args:
+      - "evidence"
+      - "add-log"
+      - "--log-path"
+      - "${root}/uart.log"
+      - "--pattern"
+      - "panic"
+      - "--before"
+      - "0"
+      - "--after"
+      - "0"
+      - "--max-matches"
+      - "1"
+      - "--note"
+      - "panic line"
+    expect_exit: 0
+
+  - type: capture
+    from_file: "triage/evidence/index.md"
+    regex: "\\b(E\\d{3})\\b"
+    var: eid
+
+  - type: run
+    args: ["facts", "add", "--text", "可能是电源问题", "--evidence", "${eid}"]
+    expect_exit: 0
+
+  - type: run
+    args: ["validate"]
+    expect_exit: 2

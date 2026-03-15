@@ -1,0 +1,44 @@
+name: evidence_add_log_line_range
+description: evidence add-log supports fixed line range capture
+
+fixtures:
+  - path: uart.log
+    content: |
+      l1
+      l2
+      l3
+      l4
+
+steps:
+  - type: run
+    args: ["init", "--profile", "embedded_system_v1"]
+    expect_exit: 0
+
+  - type: run
+    args:
+      - "evidence"
+      - "add-log"
+      - "--log-path"
+      - "${root}/uart.log"
+      - "--line-start"
+      - "2"
+      - "--line-end"
+      - "3"
+      - "--note"
+      - "range 2-3"
+      - "--pattern"
+      - "ignored"
+    expect_exit: 0
+
+  - type: capture
+    from_file: "triage/evidence/index.md"
+    regex: "\\b(E\\d{3})\\b"
+    var: eid
+
+  - type: assert_file_contains
+    path: "triage/evidence/log/${eid}_log.txt"
+    contains: "2: l2"
+
+  - type: assert_file_contains
+    path: "triage/evidence/log/${eid}_log.txt"
+    contains: "3: l3"

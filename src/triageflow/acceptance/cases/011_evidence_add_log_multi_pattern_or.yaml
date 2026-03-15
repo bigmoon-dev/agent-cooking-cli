@@ -1,0 +1,43 @@
+name: evidence_add_log_multi_pattern_or
+description: evidence add-log supports multiple --pattern OR
+
+fixtures:
+  - path: uart.log
+    content: |
+      boot
+      disconnect
+      reboot
+
+steps:
+  - type: run
+    args: ["init", "--profile", "embedded_system_v1"]
+    expect_exit: 0
+
+  - type: run
+    args:
+      - "evidence"
+      - "add-log"
+      - "--log-path"
+      - "${root}/uart.log"
+      - "--pattern"
+      - "panic"
+      - "--pattern"
+      - "disconnect"
+      - "--before"
+      - "0"
+      - "--after"
+      - "0"
+      - "--max-matches"
+      - "1"
+      - "--note"
+      - "disconnect line"
+    expect_exit: 0
+
+  - type: capture
+    from_file: "triage/evidence/index.md"
+    regex: "\\b(E\\d{3})\\b"
+    var: eid
+
+  - type: assert_file_contains
+    path: "triage/evidence/index.md"
+    contains: "E001"

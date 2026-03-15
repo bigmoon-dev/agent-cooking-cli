@@ -1,0 +1,17 @@
+name: validate_fails_on_fact_without_eid
+description: validate must fail if a non-empty fact line has no EID
+
+steps:
+  - type: run
+    args: ["init", "--profile", "embedded_system_v1"]
+    expect_exit: 0
+
+  - type: write_file
+    path: "triage/facts.md"
+    content: |
+      # Facts
+      F001: this is a fact without evidence
+
+  - type: run
+    args: ["validate"]
+    expect_exit: 2

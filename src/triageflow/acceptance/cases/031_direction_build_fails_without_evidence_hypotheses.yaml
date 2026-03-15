@@ -1,0 +1,14 @@
+name: direction_build_fails_without_evidence_hypotheses
+description: direction-build must fail if no evidence-backed hypotheses exist
+
+steps:
+  - type: run
+    args: ["init", "--profile", "embedded_system_v1"]
+    expect_exit: 0
+
+  - type: run
+    args: ["direction-build", "--overwrite"]
+    expect_exit: 2
+
+  - type: assert_last_stdout_contains
+    contains: "No evidence-backed hypotheses"
