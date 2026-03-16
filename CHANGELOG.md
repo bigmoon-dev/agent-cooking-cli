@@ -6,6 +6,8 @@ The format is based on Keep a Changelog.
 
 ## Unreleased
 
+## 0.1.0 - 2026-03-16
+
 ### Added
 - Profiles (workflow recipes):
   - `embedded_system_v1` for embedded/system triage (stability/power/bt/charging), UART-first.
