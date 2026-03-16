@@ -9,7 +9,7 @@ pipx install git+https://github.com/bigmoon-dev/agent-cooking-cli.git
 Run:
 
 ```bash
-python -m triageflow --help
+kitchen --help
 ```
 
 ## Development (editable)

@@ -32,6 +32,12 @@ export TRIAGEFLOW_ROOT=/path/to/workspace
 python -m triageflow start --profile <profile_id>
 ```
 
+If the `kitchen` command is available, you can use it instead:
+
+```bash
+kitchen start --profile <profile_id>
+```
+
 3) Always drive the session by `next`:
 
 ```bash

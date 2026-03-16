@@ -29,7 +29,7 @@ Hard rule: no evidence -> no hypothesis/direction.
 
 ```bash
 pipx install git+https://github.com/bigmoon-dev/agent-cooking-cli.git
-python -m triageflow --help
+kitchen --help
 ```
 
 ### Editable install (dev)
