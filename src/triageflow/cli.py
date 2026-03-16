@@ -1773,12 +1773,21 @@ def next_steps() -> None:
     if not index_path.exists() or not re.search(r"\bE\d{3}\b", _read_text_if_exists(index_path)):
         required_ev = _profile_required_evidence(profile)
         if "uart_log" in required_ev:
+            # If uart log is already attached and anchors exist, prefer hunt.
+            uart_attached = isinstance(case.get("uart_log_path"), str) and str(case.get("uart_log_path")).strip()
             anchors = case.get("anchor_keywords")
-            if isinstance(anchors, list) and anchors:
-                hint = anchors[0]
+            anchors_ok = isinstance(anchors, list) and any(str(a).strip() for a in anchors)
+            if uart_attached and anchors_ok:
+                typer.echo("Next: evidence hunt")
             else:
                 hint = "panic"
-            typer.echo(f"Next: evidence add-log --log-path <uart.log> --pattern {hint}")
+                if isinstance(anchors, list) and anchors:
+                    for a in anchors:
+                        s = str(a).strip()
+                        if s:
+                            hint = s
+                            break
+                typer.echo(f"Next: evidence add-log --log-path <uart.log> --pattern {hint}")
         else:
             typer.echo("Next: evidence add-text --source <source> --note <fact> --content <text>")
         raise typer.Exit(code=0)

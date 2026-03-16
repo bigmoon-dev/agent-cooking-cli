@@ -1,0 +1,53 @@
+name: next_prefers_hunt
+description: next should suggest evidence hunt when uart is attached and anchors exist
+
+fixtures:
+  - path: uart.log
+    content: |
+      boot
+      panic
+
+steps:
+  - type: run
+    args: ["init", "--profile", "embedded_system_v1"]
+    expect_exit: 0
+
+  - type: run
+    args: ["evidence", "attach", "--uart-log", "${root}/uart.log"]
+    expect_exit: 0
+
+  - type: write_file
+    path: "triage/case.yaml"
+    content: |
+      uart_log_path: "${root}/uart.log"
+      anchor_keywords:
+        - "panic"
+
+  - type: run
+    args: ["round", "run", "0", "--no-editor"]
+    input: |
+      symptom
+      scope
+      fw
+      hw
+      repro
+      tw
+    expect_exit: 0
+
+  - type: run
+    args: ["round", "run", "1", "--no-editor"]
+    input: |
+      mixed
+      n
+      unknown
+      unknown
+      unknown
+      unknown
+      
+    expect_exit: 0
+
+  - type: run
+    args: ["next"]
+    expect_exit: 0
+  - type: assert_last_stdout_contains
+    contains: "Next: evidence hunt"
