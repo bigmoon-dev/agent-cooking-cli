@@ -14,7 +14,7 @@ python -m triageflow acceptance run
 
 ## Coverage
 
-Current coverage target is informational.
+Current coverage target is informational. Coverage requires `pytest-cov`.
 
 ```bash
 python -m pytest -q --cov=triageflow --cov-report=term-missing

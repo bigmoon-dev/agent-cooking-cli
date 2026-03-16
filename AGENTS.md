@@ -32,6 +32,14 @@ python -m triageflow next
 - Prefer CLI writers over manual file edits:
   - `facts add`, `hypotheses add`, `direction-build`, `validate`.
 
+Embedded hint:
+
+- Capture UART evidence with `python -m triageflow evidence add-log ...`.
+
+Design/product hint:
+
+- Add document/notes evidence with `python -m triageflow evidence add-text ...`.
+
 ## Minimal Commands
 
 - Status digest: `python -m triageflow status`
