@@ -943,11 +943,13 @@ def evidence_hunt(
         raise typer.BadParameter("No uart_log_path attached. Run: evidence attach --uart-log <file>.")
 
     created: List[str] = []
+    summary: List[str] = []
     for a in anchors:
         pat = str(a).strip()
         if not pat:
             continue
         # Reuse add-log (pattern list)
+        before_count = len(created)
         try:
             evidence_add_log(
                 log_path=Path(uart),
@@ -959,15 +961,23 @@ def evidence_hunt(
                 line_end=None,
                 note=note,
             )
-            latest = _latest_eid(tdir)
-            if latest:
-                created.append(latest)
+            # Collect new EIDs added by this call
+            after_eid = _latest_eid(tdir)
+            if after_eid and (not created or after_eid != created[-1]):
+                created.append(after_eid)
         except typer.Exit:
             # No match for this anchor; continue
             continue
 
+        if len(created) > before_count:
+            summary.append(f"- {pat}: {', '.join(created[before_count:])}")
+
     if created:
-        typer.echo(f"Created evidence: {', '.join(created)}")
+        typer.echo("Created evidence:")
+        for line in summary:
+            typer.echo(line)
+        typer.echo("")
+        typer.echo(f"Next suggested step: facts add --text <fact> --evidence {created[0]}")
     else:
         typer.echo("No matches for any anchors")
         raise typer.Exit(code=1)
