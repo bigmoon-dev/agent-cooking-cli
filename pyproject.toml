@@ -32,8 +32,12 @@ line-length = 100
 target-version = "py38"
 
 [tool.ruff.lint]
-select = ["E", "F"]
+select = ["E", "F", "I"]
 ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"setup.py" = ["I"]
+"tests/**/*.py" = ["I"]
 
 [project.scripts]
 kitchen = "triageflow.cli:app"
