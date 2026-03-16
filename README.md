@@ -24,7 +24,14 @@ Hard rule: no evidence -> no hypothesis/direction.
 
 ## Install
 
-For local development:
+### pipx (recommended)
+
+```bash
+pipx install git+https://github.com/bigmoon-dev/agent-cooking-cli.git
+python -m triageflow --help
+```
+
+### Editable install (dev)
 
 ```bash
 python -m pip install -e .
