@@ -6,6 +6,15 @@ The format is based on Keep a Changelog.
 
 ## Unreleased
 
+## 0.1.1 - 2026-03-16
+
+### Fixed
+- Prevent template placeholders from affecting the MVP flow ("next" guidance and direction selection).
+
+### Added
+- README MVP copy/paste script for an end-to-end embedded demo.
+- README language link polish.
+
 ## 0.1.0 - 2026-03-16
 
 ### Added
