@@ -6,6 +6,16 @@ The format is based on Keep a Changelog.
 
 ## Unreleased
 
+## 0.1.2 - 2026-03-16
+
+### Added
+- Agent entry docs: `AGENTS.md`, `CLAUDE.md`, `skill.md`.
+- Documentation entrypoint under `docs/`.
+
+### Changed
+- Testing docs and dev dependencies aligned (coverage requires `pytest-cov`).
+- README badges and MVP documentation improved.
+
 ## 0.1.1 - 2026-03-16
 
 ### Fixed
