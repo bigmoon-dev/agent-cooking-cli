@@ -24,6 +24,13 @@ python -m triageflow start --profile <profile_id>
 python -m triageflow next
 ```
 
+If the `kitchen` command is available (installed via pipx), you can use it instead:
+
+```bash
+kitchen start --profile <profile_id>
+kitchen next
+```
+
 ## Hard Rules
 
 - Do not rely on chat memory: state must be persisted under `TRIAGEFLOW_ROOT/triage/`.
