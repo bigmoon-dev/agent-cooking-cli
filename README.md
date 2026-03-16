@@ -41,6 +41,59 @@ python -m triageflow init --profile embedded_system_v1
 python -m triageflow next
 ```
 
+If you want a minimal reproducible demo, create a small UART log:
+
+```bash
+cat > "$TRIAGEFLOW_ROOT/uart.log" <<'EOF'
+boot
+panic: watchdog
+stack: ...
+reboot
+EOF
+```
+
+Then follow `next`.
+
+### MVP Script (Copy/Paste)
+
+This script runs the smallest end-to-end flow non-interactively:
+
+```bash
+export TRIAGEFLOW_ROOT=/path/to/workspace
+rm -rf "$TRIAGEFLOW_ROOT/triage"
+mkdir -p "$TRIAGEFLOW_ROOT"
+
+cat > "$TRIAGEFLOW_ROOT/uart.log" <<'EOF'
+boot
+panic: watchdog
+stack: ...
+reboot
+EOF
+
+python -m triageflow init --profile embedded_system_v1
+
+printf "mvp reboot\naffects all\nfw-mvp\nhw-mvp\nopen lid, pair, wait\nnow\n" | \
+  python -m triageflow round run 0 --no-editor
+
+printf "mixed\nn\nunknown\nunknown\nunknown\nunknown\n\n" | \
+  python -m triageflow round run 1 --no-editor
+
+python -m triageflow evidence add-log \
+  --log-path "$TRIAGEFLOW_ROOT/uart.log" \
+  --pattern "panic" --before 1 --after 2 --max-matches 1 \
+  --note "panic window"
+
+python -m triageflow facts add --text "panic observed during flow" --evidence E001
+python -m triageflow hypotheses add \
+  --hypothesis "watchdog reset triggers reboot" \
+  --evidence E001 \
+  --test "print reset cause / wdt reason"
+
+python -m triageflow direction-build --overwrite --top-n 1
+python -m triageflow validate
+python -m triageflow status
+```
+
 ## Profiles
 
 List built-in profiles:
