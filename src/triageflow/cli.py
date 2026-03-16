@@ -1792,8 +1792,6 @@ def next_steps() -> None:
         typer.echo(f"Next: facts add --text <fact> --evidence {eid}")
         raise typer.Exit(code=0)
 
-    hyp_path = tdir / "hypotheses.md"
-    hyp_text = _read_text_if_exists(hyp_path)
     if not _has_real_hypothesis(tdir):
         eid = _latest_eid(tdir) or "E001"
         typer.echo(f"Next: hypotheses add --hypothesis <...> --evidence {eid}")

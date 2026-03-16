@@ -3,6 +3,7 @@
 [![CI](https://github.com/bigmoon-dev/agent-cooking-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/bigmoon-dev/agent-cooking-cli/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-31%25-yellow)](docs/testing.md)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Lint: ruff](https://img.shields.io/badge/lint-ruff-black.svg)](https://github.com/astral-sh/ruff)
 
 Evidence-first workflows for agents. Generate a workspace, then execute steps with auditable artifacts.
 
