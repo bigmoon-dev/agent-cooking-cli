@@ -1,0 +1,37 @@
+name: evidence_attach_and_add_log
+description: evidence attach should allow add-log without --log-path
+
+fixtures:
+  - path: uart.log
+    content: |
+      boot
+      panic
+
+steps:
+  - type: run
+    args: ["init", "--profile", "embedded_system_v1"]
+    expect_exit: 0
+
+  - type: run
+    args: ["evidence", "attach", "--uart-log", "${root}/uart.log"]
+    expect_exit: 0
+
+  - type: run
+    args:
+      - "evidence"
+      - "add-log"
+      - "--pattern"
+      - "panic"
+      - "--before"
+      - "0"
+      - "--after"
+      - "0"
+      - "--max-matches"
+      - "1"
+      - "--note"
+      - "panic line"
+    expect_exit: 0
+
+  - type: assert_file_contains
+    path: "triage/evidence/index.md"
+    contains: "E001"

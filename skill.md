@@ -53,6 +53,7 @@ Repeat `next` until you reach `validate`.
 - List profiles: `python -m triageflow profile list`
 - Show a profile: `python -m triageflow profile show <profile_id>`
 - Validate profile: `python -m triageflow profile validate`
+- Attach UART log (embedded): `python -m triageflow evidence attach --uart-log /path/to/uart.log`
 - Add evidence (embedded): `python -m triageflow evidence add-log ...`
 - Add evidence (design/product): `python -m triageflow evidence add-text ...`
 - Status digest: `python -m triageflow status`

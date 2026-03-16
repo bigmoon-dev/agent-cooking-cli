@@ -896,6 +896,30 @@ evidence_app = typer.Typer(add_completion=False)
 app.add_typer(evidence_app, name="evidence", help="Manage evidence (EIDs)")
 
 
+@evidence_app.command("attach")
+def evidence_attach(
+    uart_log: Optional[Path] = typer.Option(None, exists=True, dir_okay=False, help="UART log file to attach"),
+) -> None:
+    """Attach evidence sources to the current workspace (saves paths in case.yaml)."""
+
+    root = _repo_root()
+    tdir = _triage_dir(root)
+    if not tdir.exists():
+        raise typer.BadParameter("triage/ does not exist. Run: triage init")
+
+    case_path = tdir / "case.yaml"
+    data = _load_yaml(case_path)
+
+    if uart_log is not None:
+        data["uart_log_path"] = str(Path(uart_log).expanduser())
+
+    data["updated_at"] = _now_iso()
+    if "created_at" not in data:
+        data["created_at"] = _now_iso()
+    _dump_yaml(case_path, data)
+    typer.echo(f"Wrote {case_path}")
+
+
 @evidence_app.command("add")
 def evidence_add(
     etype: str = typer.Option(..., "--type", help="log|code|cmd"),
@@ -963,7 +987,7 @@ def evidence_add_text(
 
 @evidence_app.command("add-log")
 def evidence_add_log(
-    log_path: Path = typer.Option(..., exists=True, dir_okay=False, help="Log file path"),
+    log_path: Optional[Path] = typer.Option(None, exists=True, dir_okay=False, help="Log file path (optional if attached)"),
     pattern: List[str] = typer.Option(..., "--pattern", help="Regex pattern to match; can be repeated"),
     before: int = typer.Option(20, min=0, help="Lines of context before match"),
     after: int = typer.Option(20, min=0, help="Lines of context after match"),
@@ -978,6 +1002,14 @@ def evidence_add_log(
     tdir = _triage_dir(root)
     if not tdir.exists():
         raise typer.BadParameter("triage/ does not exist. Run: triage init")
+
+    if log_path is None:
+        case = _load_yaml(tdir / "case.yaml")
+        p = case.get("uart_log_path")
+        if isinstance(p, str) and p.strip():
+            log_path = Path(p)
+    if log_path is None:
+        raise typer.BadParameter("--log-path is required (or attach uart_log_path via: evidence attach --uart-log <file>)")
 
     if line_start is not None or line_end is not None:
         if line_start is None or line_end is None:
