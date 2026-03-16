@@ -18,7 +18,7 @@ Use a workspace root outside the code repo:
 
 ```bash
 export TRIAGEFLOW_ROOT=/path/to/workspace
-python -m triageflow init --profile <profile_id>
+python -m triageflow start --profile <profile_id>
 
 # Repeat: it prints the recommended next command.
 python -m triageflow next

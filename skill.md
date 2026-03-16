@@ -29,7 +29,7 @@ export TRIAGEFLOW_ROOT=/path/to/workspace
 2) Initialize a workflow:
 
 ```bash
-python -m triageflow init --profile <profile_id>
+python -m triageflow start --profile <profile_id>
 ```
 
 3) Always drive the session by `next`:

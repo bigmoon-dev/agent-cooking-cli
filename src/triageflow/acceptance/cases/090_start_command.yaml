@@ -1,0 +1,11 @@
+name: start_command
+description: start should init and then print next
+
+steps:
+  - type: run
+    args: ["start", "--profile", "embedded_system_v1"]
+    expect_exit: 0
+  - type: assert_last_stdout_contains
+    contains: "Initialized"
+  - type: assert_last_stdout_contains
+    contains: "Next: round run 0"
