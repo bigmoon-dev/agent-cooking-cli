@@ -1727,8 +1727,22 @@ def acceptance_run() -> None:
 
     from typer.testing import CliRunner
 
-    # Mix stderr into stdout so YAML assertions can see error messages.
-    runner = CliRunner(mix_stderr=True)
+    # Keep compatible with multiple Typer versions.
+    runner = CliRunner()
+
+    def _result_output(res) -> str:
+        # click.testing.Result provides .output; typer may also expose .stdout/.stderr
+        out = getattr(res, "output", None)
+        if isinstance(out, str) and out:
+            return out
+        stdout = getattr(res, "stdout", "")
+        try:
+            stderr = getattr(res, "stderr", "")
+        except ValueError:
+            stderr = ""
+        if isinstance(stdout, str) or isinstance(stderr, str):
+            return f"{stdout}{stderr}"
+        return ""
 
     cases_dir = Path(__file__).resolve().parent / "acceptance" / "cases"
     case_files = sorted(cases_dir.glob("*.yaml"))
@@ -1792,7 +1806,7 @@ def acceptance_run() -> None:
                     ev = step.get("expect_exit")
                     expect_exit = int(ev) if ev is not None else 0
                     res_run = runner.invoke(app, ["--root", str(root)] + argv, input=input_text)
-                    last_stdout = res_run.stdout
+                    last_stdout = _result_output(res_run)
                     code = res_run.exit_code
                     if code != expect_exit:
                         typer.echo("---- command failed ----")
