@@ -1720,6 +1720,16 @@ def next_steps() -> None:
     typer.echo("Next: validate")
 
 
+@app.command("start")
+def start(
+    profile: str = typer.Option(..., help="Profile id (e.g. embedded_system_v1)"),
+) -> None:
+    """Start a workflow: init + print next."""
+
+    init(profile=profile)
+    next_steps()
+
+
 def main() -> None:
     app()
 

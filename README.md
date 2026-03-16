@@ -46,7 +46,7 @@ Pick a workspace root (outside your code repo) and run:
 
 ```bash
 export TRIAGEFLOW_ROOT=/path/to/workspace
-python -m triageflow init --profile embedded_system_v1
+python -m triageflow start --profile embedded_system_v1
 
 # Keep running this; it tells you the next command.
 python -m triageflow next
