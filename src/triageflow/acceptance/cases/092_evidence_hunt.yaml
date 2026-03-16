@@ -1,0 +1,34 @@
+name: evidence_hunt
+description: evidence hunt should create evidence windows for matching anchors
+
+fixtures:
+  - path: uart.log
+    content: |
+      boot
+      panic: watchdog
+      reboot
+
+steps:
+  - type: run
+    args: ["init", "--profile", "embedded_system_v1"]
+    expect_exit: 0
+
+  - type: run
+    args: ["evidence", "attach", "--uart-log", "${root}/uart.log"]
+    expect_exit: 0
+
+  - type: write_file
+    path: "triage/case.yaml"
+    content: |
+      uart_log_path: "${root}/uart.log"
+      anchor_keywords:
+        - "panic"
+        - "nope"
+
+  - type: run
+    args: ["evidence", "hunt", "--before", "0", "--after", "0", "--max-matches", "1", "--note", "hunt"]
+    expect_exit: 0
+
+  - type: assert_file_contains
+    path: "triage/evidence/index.md"
+    contains: "E001"

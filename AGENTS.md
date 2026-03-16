@@ -35,6 +35,7 @@ python -m triageflow next
 Embedded hint:
 
 - Optional: attach UART log path once: `python -m triageflow evidence attach --uart-log /path/to/uart.log`.
+- Optional: auto-capture anchor windows: `python -m triageflow evidence hunt`.
 - Capture UART evidence with `python -m triageflow evidence add-log ...`.
 
 Design/product hint:

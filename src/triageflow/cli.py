@@ -920,6 +920,60 @@ def evidence_attach(
     typer.echo(f"Wrote {case_path}")
 
 
+@evidence_app.command("hunt")
+def evidence_hunt(
+    before: int = typer.Option(30, min=0, help="Lines of context before match"),
+    after: int = typer.Option(50, min=0, help="Lines of context after match"),
+    max_matches: int = typer.Option(1, min=1, help="Max matches per pattern"),
+    note: str = typer.Option("anchor window", help="Note (fact only)"),
+) -> None:
+    """Capture evidence windows for each anchor keyword in case.yaml."""
+
+    root = _repo_root()
+    tdir = _triage_dir(root)
+    if not tdir.exists():
+        raise typer.BadParameter("triage/ does not exist. Run: triage init")
+
+    case = _load_yaml(tdir / "case.yaml")
+    anchors = case.get("anchor_keywords")
+    if not isinstance(anchors, list) or not anchors:
+        raise typer.BadParameter("No anchor_keywords found. Run: round run 1 first (or set anchor_keywords in case.yaml).")
+
+    uart = case.get("uart_log_path")
+    if not isinstance(uart, str) or not uart.strip():
+        raise typer.BadParameter("No uart_log_path attached. Run: evidence attach --uart-log <file>.")
+
+    created: List[str] = []
+    for a in anchors:
+        pat = str(a).strip()
+        if not pat:
+            continue
+        # Reuse add-log (pattern list)
+        try:
+            evidence_add_log(
+                log_path=Path(uart),
+                pattern=[pat],
+                before=before,
+                after=after,
+                max_matches=max_matches,
+                line_start=None,
+                line_end=None,
+                note=note,
+            )
+            latest = _latest_eid(tdir)
+            if latest:
+                created.append(latest)
+        except typer.Exit:
+            # No match for this anchor; continue
+            continue
+
+    if created:
+        typer.echo(f"Created evidence: {', '.join(created)}")
+    else:
+        typer.echo("No matches for any anchors")
+        raise typer.Exit(code=1)
+
+
 @evidence_app.command("add")
 def evidence_add(
     etype: str = typer.Option(..., "--type", help="log|code|cmd"),
