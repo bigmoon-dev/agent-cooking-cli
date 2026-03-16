@@ -29,6 +29,9 @@ steps:
     args: ["evidence", "hunt", "--before", "0", "--after", "0", "--max-matches", "1", "--note", "hunt"]
     expect_exit: 0
 
+  - type: assert_last_stdout_contains
+    contains: "Created evidence:"
+
   - type: assert_file_contains
     path: "triage/evidence/index.md"
     contains: "E001"
