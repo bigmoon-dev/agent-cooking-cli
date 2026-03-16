@@ -11,7 +11,6 @@ import click
 import typer
 import yaml
 
-
 app = typer.Typer(add_completion=False, help="Evidence-first bug triage workflow")
 
 
