@@ -1,0 +1,47 @@
+name: direction_build_ignores_template
+description: direction-build must not select template hypothesis block
+
+fixtures:
+  - path: uart.log
+    content: |
+      panic
+
+steps:
+  - type: run
+    args: ["init", "--profile", "embedded_system_v1"]
+    expect_exit: 0
+
+  - type: run
+    args:
+      - "evidence"
+      - "add-log"
+      - "--log-path"
+      - "${root}/uart.log"
+      - "--pattern"
+      - "panic"
+      - "--before"
+      - "0"
+      - "--after"
+      - "0"
+      - "--max-matches"
+      - "1"
+      - "--note"
+      - "panic line"
+    expect_exit: 0
+
+  - type: capture
+    from_file: "triage/evidence/index.md"
+    regex: "\\b(E\\d{3})\\b"
+    var: eid
+
+  - type: run
+    args: ["hypotheses", "add", "--hypothesis", "real", "--evidence", "${eid}"]
+    expect_exit: 0
+
+  - type: run
+    args: ["direction-build", "--overwrite", "--top-n", "1"]
+    expect_exit: 0
+
+  - type: assert_file_contains
+    path: "triage/directions.md"
+    contains: "From: H002"

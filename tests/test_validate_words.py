@@ -48,7 +48,10 @@ def test_validate_fails_on_speculation_word(tmp_path: Path):
     eid = m.group(1)
 
     # add a fact with a banned word
-    res = runner.invoke(cli.app, ["--root", str(root), "facts", "add", "--text", "可能是电源问题", "--evidence", eid])
+    res = runner.invoke(
+        cli.app,
+        ["--root", str(root), "facts", "add", "--text", "可能是电源问题", "--evidence", eid],
+    )
     assert res.exit_code == 0
 
     res = runner.invoke(cli.app, ["--root", str(root), "validate"])
