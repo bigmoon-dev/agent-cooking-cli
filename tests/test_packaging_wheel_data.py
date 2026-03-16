@@ -25,7 +25,16 @@ def test_wheel_includes_profiles_and_acceptance_cases(tmp_path: Path):
     target = tmp_path / "site"
     target.mkdir(parents=True, exist_ok=True)
     subprocess.check_call(
-        [sys.executable, "-m", "pip", "install", "--no-deps", "--target", str(target), str(wheel_path)],
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--no-deps",
+            "--target",
+            str(target),
+            str(wheel_path),
+        ],
         env={**os.environ},
     )
 

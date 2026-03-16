@@ -384,7 +384,7 @@ def _infer_triage_templates() -> dict[str, str]:
             "- No evidence -> move to leads.md (does not participate in direction ranking).\n\n"
             "H001 (Status: Open | Confidence: Medium)\n"
             "Hypothesis: \n"
-            "Evidence: (E001)\n"
+            "Evidence: ()\n"
             "Test: \n\n"
         ),
         "directions.md": (
@@ -395,7 +395,7 @@ def _infer_triage_templates() -> dict[str, str]:
             "DIR-1 (Confidence: Medium)\n"
             "Direction: \n"
             "Explains: (F001)\n"
-            "Evidence chain: (E001)\n"
+            "Evidence chain: ()\n"
             "Next minimal test: \n"
             "Falsify if: \n\n"
         ),
@@ -1166,6 +1166,13 @@ def validate() -> None:
 
         for header, body in blocks:
             eids = set(re.findall(r"\bE\d{3}\b", body))
+            if (
+                not eids
+                and label in {"hypotheses.md", "directions.md"}
+                and (header.startswith("H001") or header.startswith("DIR-1"))
+            ):
+                # Template examples are allowed to be empty.
+                continue
             if not eids:
                 errors.append(f"{label}: block '{header}' cites no EID")
                 continue

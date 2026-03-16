@@ -91,7 +91,7 @@ steps:
     args: ["next"]
     expect_exit: 0
   - type: assert_last_stdout_contains
-    contains: "Next: direction-build"
+    contains: "Next: hypotheses add"
 
   - type: run
     args: ["hypotheses", "add", "--hypothesis", "watchdog reset", "--evidence", "${eid}"]
