@@ -2,7 +2,7 @@
 
 Evidence-first workflows for agents. Generate a workspace, then execute steps with auditable artifacts.
 
-Chinese documentation: `README.zh-CN.md`.
+[中文版 README](README.zh-CN.md)
 
 ## What It Does
 
