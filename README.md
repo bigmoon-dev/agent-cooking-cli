@@ -113,6 +113,10 @@ Current profiles:
 - `design_system_v1`: software design decisions
 - `product_definition_v1`: product definition decisions
 
+## For Agents
+
+See `AGENTS.md`.
+
 ## Developer
 
 ```bash
