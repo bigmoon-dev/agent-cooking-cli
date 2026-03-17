@@ -6,6 +6,12 @@ The format is based on Keep a Changelog.
 
 ## Unreleased
 
+### Changed
+- Packaging: unify build/release metadata under `pyproject.toml` and remove stale build artifacts.
+
+### Fixed
+- Evidence writes: add atomic file writes and a lightweight lock to reduce EID allocation races and partial evidence/index updates.
+
 ## 0.1.3 - 2026-03-17
 
 ### Changed

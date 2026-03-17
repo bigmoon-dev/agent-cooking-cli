@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import datetime as _dt
+import os
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -46,6 +48,41 @@ def read_text_if_exists(path: Path) -> str:
 def write_text(path: Path, content: str) -> None:
     ensure_parent(path)
     path.write_text(content, encoding="utf-8")
+
+
+def atomic_write_text(path: Path, content: str) -> None:
+    """Atomically write a text file (utf-8).
+
+    Write to a temp file in the same directory and replace the target.
+    This reduces the chance of partially-written files.
+    """
+
+    ensure_parent(path)
+    parent = path.parent
+    fd, tmp_name = tempfile.mkstemp(prefix=path.name + ".tmp-", dir=str(parent))
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
+        tmp_path.replace(path)
+        # Best-effort directory fsync to persist rename.
+        try:
+            dfd = os.open(str(parent), os.O_DIRECTORY)
+        except OSError:
+            dfd = None
+        if dfd is not None:
+            try:
+                os.fsync(dfd)
+            finally:
+                os.close(dfd)
+    finally:
+        try:
+            if tmp_path.exists():
+                tmp_path.unlink()
+        except OSError:
+            pass
 
 
 def load_yaml(path: Path) -> dict:
