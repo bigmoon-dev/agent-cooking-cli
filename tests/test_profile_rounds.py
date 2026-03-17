@@ -1,4 +1,4 @@
-import triageflow.cli as cli
+from triageflow.profile import get_round_fields
 
 
 def test_get_profile_round_fields():
@@ -8,6 +8,6 @@ def test_get_profile_round_fields():
             {"id": 1, "fields": ["c"]},
         ]
     }
-    assert cli._get_profile_round_fields(profile, 0) == ["a", "b"]
-    assert cli._get_profile_round_fields(profile, 1) == ["c"]
-    assert cli._get_profile_round_fields(profile, 2) == []
+    assert get_round_fields(profile, 0) == ["a", "b"]
+    assert get_round_fields(profile, 1) == ["c"]
+    assert get_round_fields(profile, 2) == []
