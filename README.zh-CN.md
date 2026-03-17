@@ -29,13 +29,72 @@ python -m triageflow --help
 
 也提供命令入口 `kitchen`，但最稳定的方式是使用 `python -m triageflow ...`。
 
+## 5-Minute MVP
+
+这是最快的、可验证的上手路径：从安装到得到一个可以通过 `validate` 的完整结果。
+
+你将完成：
+
+1. 创建一个 triage workspace
+2. 绑定一个小的 UART log
+3. 捕获一条证据（E001）
+4. 添加一条由证据支持的事实
+5. 添加一条由证据支持的假设
+6. 生成一条 direction
+7. 验证 workspace
+
+成功后，你将得到一个完整的 `triage/` 目录，所有证据与决策产物都落盘。
+
+### 运行
+
+```bash
+python3 -m pip install -e .
+export TRIAGEFLOW_ROOT=/tmp/triageflow-mvp
+rm -rf "$TRIAGEFLOW_ROOT"
+mkdir -p "$TRIAGEFLOW_ROOT"
+
+cat > "$TRIAGEFLOW_ROOT/uart.log" <<'EOF'
+boot
+panic: watchdog
+stack: ...
+reboot
+EOF
+
+python3 -m triageflow start --profile embedded_system_v1
+
+printf "mvp reboot\naffects all\nfw-mvp\nhw-mvp\nopen lid, pair, wait\nnow\n" | \
+  python3 -m triageflow round run 0 --no-editor
+
+printf "mixed\nn\nunknown\nunknown\nunknown\nunknown\npanic\n" | \
+  python3 -m triageflow round run 1 --no-editor
+
+python3 -m triageflow evidence attach --uart-log "$TRIAGEFLOW_ROOT/uart.log"
+python3 -m triageflow evidence hunt
+
+python3 -m triageflow facts add \
+  --text "panic observed during flow" \
+  --evidence E001
+
+python3 -m triageflow hypotheses add \
+  --hypothesis "watchdog reset triggers reboot" \
+  --evidence E001 \
+  --test "print reset cause / wdt reason"
+
+python3 -m triageflow direction-build --overwrite --top-n 1
+python3 -m triageflow validate
+python3 -m triageflow status
+python3 -m triageflow next
+```
+
+如果你想看更“讲解式”的版本，请看 `docs/quickstart.zh-CN.md`。
+
 ## 快速开始（嵌入式/系统）
 
 选择一个工作区根目录（建议放在代码仓库外）：
 
 ```bash
 export TRIAGEFLOW_ROOT=/path/to/workspace
-python -m triageflow init --profile embedded_system_v1
+python -m triageflow start --profile embedded_system_v1
 
 # 反复运行 next，它会告诉你下一步该执行什么命令
 python -m triageflow next
