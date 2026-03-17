@@ -4,6 +4,7 @@ Start here:
 
 - `install.md`: installation options
 - `quickstart.md`: first-run MVP walkthrough
+- `quickstart.zh-CN.md`: feb	01ff009cbf08e2d587f09
 - `testing.md`: tests and coverage
 
 ## Developer Notes
