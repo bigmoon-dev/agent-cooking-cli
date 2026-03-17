@@ -6,6 +6,11 @@ The format is based on Keep a Changelog.
 
 ## Unreleased
 
+## 0.1.4 - 2026-03-17
+
+### Changed
+- Docs: improve first-run MVP experience (English + Chinese) with 5-minute walkthroughs and quickstart guides.
+
 ### Changed
 - Packaging: unify build/release metadata under `pyproject.toml` and remove stale build artifacts.
 
