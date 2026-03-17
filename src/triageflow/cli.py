@@ -1,20 +1,35 @@
 from __future__ import annotations
 
-import datetime as _dt
-import os
 import re
-import tempfile
 from pathlib import Path
 from typing import List, Optional
 
-import click
 import typer
 import yaml
 
+from .core import TRIAGE_DIRNAME, WORKSPACE
+from .core import dump_yaml as _dump_yaml
+from .core import load_yaml as _load_yaml
+from .core import now_iso as _now_iso
+from .core import read_text_if_exists as _read_text_if_exists
+from .core import write_text as _write_text
+from .directions import build_directions as _build_directions
+from .evidence import add_evidence_snippet as _add_evidence_snippet
+from .evidence import capture_log_range as _capture_log_range
+from .evidence import capture_log_windows as _capture_log_windows
+from .evidence import latest_eid as _latest_eid
+from .evidence import resolve_uart_log_path as _resolve_uart_log_path
+from .init_workspace import init_workspace as _init_workspace
+from .profile_cli import list_profiles as _profile_list
+from .profile_cli import show_profile as _profile_show
+from .profile_cli import validate_profile as _profile_validate
+from .rounds import deprecated_round0 as _deprecated_round0
+from .rounds import deprecated_round1 as _deprecated_round1
+from .rounds import run_round as _run_round
+from .validate_rules import assert_eids_exist as _assert_eids_exist
+
 app = typer.Typer(add_completion=False, help="Evidence-first bug triage workflow")
 
-
-TRIAGE_DIRNAME = "triage"
 
 _WORKSPACE_ROOT: Optional[Path] = None
 
@@ -31,8 +46,10 @@ def _global_options(
     global _WORKSPACE_ROOT
     if root is None:
         _WORKSPACE_ROOT = None
+        WORKSPACE.set_root(None)
         return
     _WORKSPACE_ROOT = Path(root).expanduser().resolve()
+    WORKSPACE.set_root(_WORKSPACE_ROOT)
 
 
 def _profiles_dir() -> Path:
@@ -117,15 +134,6 @@ def _require_valid_profile(profile: dict) -> dict:
     return profile
 
 
-def _load_active_profile(triage_dir: Path) -> dict:
-    """Load triage/profile.yaml if present; else return empty."""
-
-    p = triage_dir / "profile.yaml"
-    if not p.exists():
-        return {}
-    return _require_valid_profile(_load_yaml(p))
-
-
 def _repo_root() -> Path:
     if _WORKSPACE_ROOT is not None:
         return _WORKSPACE_ROOT
@@ -136,117 +144,6 @@ def _triage_dir(root: Path) -> Path:
     return root / TRIAGE_DIRNAME
 
 
-def _ensure_parent(path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-
-def _read_text_if_exists(path: Path) -> str:
-    if not path.exists():
-        return ""
-    return path.read_text(encoding="utf-8")
-
-
-def _write_text(path: Path, content: str) -> None:
-    _ensure_parent(path)
-    path.write_text(content, encoding="utf-8")
-
-
-def _now_iso() -> str:
-    return _dt.datetime.now(_dt.timezone.utc).astimezone().isoformat(timespec="seconds")
-
-
-def _load_yaml(path: Path) -> dict:
-    if not path.exists():
-        return {}
-    with path.open("r", encoding="utf-8") as f:
-        data = yaml.safe_load(f) or {}
-    if not isinstance(data, dict):
-        raise typer.BadParameter(f"Expected mapping YAML in {path}")
-    return data
-
-
-def _dump_yaml(path: Path, data: dict) -> None:
-    _ensure_parent(path)
-    with path.open("w", encoding="utf-8") as f:
-        yaml.safe_dump(data, f, sort_keys=False, allow_unicode=False)
-
-
-def _parse_existing_eids(index_md: str) -> list[int]:
-    # E001, E002, ...
-    nums: list[int] = []
-    for m in re.finditer(r"\bE(\d{3})\b", index_md):
-        nums.append(int(m.group(1)))
-    return nums
-
-
-def _next_eid(triage_dir: Path) -> str:
-    index_path = triage_dir / "evidence" / "index.md"
-    existing = _parse_existing_eids(_read_text_if_exists(index_path))
-    n = (max(existing) + 1) if existing else 1
-    return f"E{n:03d}"
-
-
-def _append_evidence_index(triage_dir: Path, *, eid: str, etype: str, source: str, note: str) -> None:
-    index_path = triage_dir / "evidence" / "index.md"
-    text = _read_text_if_exists(index_path)
-    if not text.strip():
-        text = (
-            "| Evidence ID | Type | Source | Time | What it shows (fact only) |\n"
-            "|---|---|---|---|---|\n"
-        )
-    line = f"| {eid} | {etype} | {source} | {_now_iso()} | {note} |\n"
-    _write_text(index_path, text + line)
-
-
-def _parse_evidence_index(triage_dir: Path) -> dict[str, dict[str, str]]:
-    """Return mapping of EID -> {type, source, note} from evidence/index.md."""
-
-    index_path = triage_dir / "evidence" / "index.md"
-    text = _read_text_if_exists(index_path)
-    info: dict[str, dict[str, str]] = {}
-    for line in text.splitlines():
-        # | E001 | log | logs/app.log:L10-L20 | ... | note |
-        if not line.startswith("|"):
-            continue
-        cols = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cols) < 5:
-            continue
-        eid = cols[0]
-        if not re.fullmatch(r"E\d{3}", eid):
-            continue
-        info[eid] = {"type": cols[1], "source": cols[2], "note": cols[4]}
-    return info
-
-
-def _evidence_files_on_disk(triage_dir: Path) -> dict[str, Path]:
-    out: dict[str, Path] = {}
-    ev_dir = triage_dir / "evidence"
-    if not ev_dir.exists():
-        return out
-    for sub in ("log", "code", "cmd"):
-        d = ev_dir / sub
-        if not d.exists():
-            continue
-        for p in d.glob("E[0-9][0-9][0-9]_*.txt"):
-            m = re.match(r"^(E\d{3})_", p.name)
-            if not m:
-                continue
-            out[m.group(1)] = p
-    return out
-
-
-def _known_eids(triage_dir: Path) -> set[str]:
-    index_text = _read_text_if_exists(triage_dir / "evidence" / "index.md")
-    return set(re.findall(r"\bE\d{3}\b", index_text))
-
-
-def _latest_eid(triage_dir: Path) -> Optional[str]:
-    index_text = _read_text_if_exists(triage_dir / "evidence" / "index.md")
-    eids = re.findall(r"\bE\d{3}\b", index_text)
-    if not eids:
-        return None
-    # Preserve order of appearance, pick the last.
-    return list(dict.fromkeys(eids))[-1]
 
 
 def _has_evidence_backed_block(text: str, header_re: str, known: set, disk: set) -> bool:
@@ -257,50 +154,6 @@ def _has_evidence_backed_block(text: str, header_re: str, known: set, disk: set)
         if any((e in known and e in disk) for e in eids):
             return True
     return False
-
-
-def _has_real_hypothesis(triage_dir: Path) -> bool:
-    known = _known_eids(triage_dir)
-    disk = set(_evidence_files_on_disk(triage_dir).keys())
-    hyp_text = _read_text_if_exists(triage_dir / "hypotheses.md")
-    blocks = _split_blocks(hyp_text, r"^H\d{3}\b.*")
-    for b in blocks:
-        body = "\n".join(b)
-        eids = set(re.findall(r"\bE\d{3}\b", body))
-        if not any((e in known and e in disk) for e in eids):
-            continue
-        # Template has empty "Hypothesis:". Require substantive content.
-        if re.search(r"^Hypothesis:\s*\S", body, flags=re.MULTILINE):
-            return True
-    return False
-
-
-def _has_generated_directions(triage_dir: Path) -> bool:
-    known = _known_eids(triage_dir)
-    disk = set(_evidence_files_on_disk(triage_dir).keys())
-    dtext = _read_text_if_exists(triage_dir / "directions.md")
-    blocks = _split_blocks(dtext, r"^DIR-\d+\b.*")
-    for b in blocks:
-        header = b[0] if b else ""
-        body = "\n".join(b)
-        eids = set(re.findall(r"\bE\d{3}\b", body))
-        if not any((e in known and e in disk) for e in eids):
-            continue
-        # Template directions don't have "From: H###" in header.
-        if re.search(r"\bFrom:\s*H\d{3}\b", header):
-            return True
-    return False
-
-
-def _assert_eids_exist(triage_dir: Path, eids: List[str]) -> None:
-    known = _known_eids(triage_dir)
-    disk = set(_evidence_files_on_disk(triage_dir).keys())
-    missing = [e for e in eids if e not in known]
-    missing_files = [e for e in eids if e not in disk]
-    if missing:
-        raise typer.BadParameter(f"Unknown EIDs (not in evidence/index.md): {', '.join(missing)}")
-    if missing_files:
-        raise typer.BadParameter(f"EIDs missing evidence files on disk: {', '.join(missing_files)}")
 
 
 def _next_id(path: Path, prefix: str) -> str:
@@ -352,80 +205,6 @@ def _join_blocks(blocks: List[List[str]]) -> str:
     return "\n".join(out_lines).rstrip() + "\n"
 
 
-def _infer_triage_templates() -> dict[str, str]:
-    # Keep templates minimal; agents fill them.
-    return {
-        "case.yaml": (
-            "case_id: \"\"\n"
-            "title: \"\"\n"
-            "problem_description: |\n"
-            "  \n"
-            "code_paths: []\n"
-            "log_paths: []\n"
-            "work_done: |\n"
-            "  \n"
-            "excluded_doc_paths: []\n"
-            "constraints:\n"
-            "  - \"Every hypothesis must cite code or log evidence\"\n"
-            "  - \"No imagination; evidence-first\"\n"
-        ),
-        "facts.md": (
-            "# Facts\n\n"
-            "Rules:\n"
-            "- Facts only; avoid speculation wording.\n"
-            "- Each fact cites evidence IDs like (E001).\n\n"
-            "F001: \n"
-        ),
-        "hypotheses.md": (
-            "# Hypotheses\n\n"
-            "Rules:\n"
-            "- Each hypothesis MUST cite at least one evidence ID (E###).\n"
-            "- No evidence -> move to leads.md (does not participate in direction ranking).\n\n"
-            "H001 (Status: Open | Confidence: Medium)\n"
-            "Hypothesis: \n"
-            "Evidence: ()\n"
-            "Test: \n\n"
-        ),
-        "directions.md": (
-            "# Directions\n\n"
-            "Rules:\n"
-            "- Keep top 1-3 directions only.\n"
-            "- Each direction MUST cite evidence IDs (E###).\n\n"
-            "DIR-1 (Confidence: Medium)\n"
-            "Direction: \n"
-            "Explains: (F001)\n"
-            "Evidence chain: ()\n"
-            "Next minimal test: \n"
-            "Falsify if: \n\n"
-        ),
-        "experiments.md": (
-            "# Experiments\n\n"
-            "X001\n"
-            "Goal: \n"
-            "Steps:\n"
-            "Expected:\n"
-            "Observed:\n"
-            "Evidence produced: (E001)\n"
-            "Conclusion: \n\n"
-        ),
-        "excluded.md": (
-            "# Excluded Suspects\n\n"
-            "S001: \n"
-            "Excluded because: (E001)\n"
-            "Experiment: (X001)\n"
-            "Residual risk: \n\n"
-        ),
-        "leads.md": (
-            "# Leads (Not hypotheses)\n\n"
-            "Only store leads that still have some evidence.\n\n"
-        ),
-        os.path.join("evidence", "index.md"): (
-            "| Evidence ID | Type | Source | Time | What it shows (fact only) |\n"
-            "|---|---|---|---|---|\n"
-        ),
-    }
-
-
 @app.command()
 def init(
     force: bool = typer.Option(False, help="Overwrite existing templates"),
@@ -435,32 +214,13 @@ def init(
 
     root = _repo_root()
     tdir = _triage_dir(root)
-    tdir.mkdir(parents=True, exist_ok=True)
-    (tdir / "evidence" / "log").mkdir(parents=True, exist_ok=True)
-    (tdir / "evidence" / "code").mkdir(parents=True, exist_ok=True)
-    (tdir / "evidence" / "cmd").mkdir(parents=True, exist_ok=True)
-
-    templates = _infer_triage_templates()
-    created = 0
-    skipped = 0
-    for rel, content in templates.items():
-        path = tdir / rel
-        if path.exists() and not force:
-            skipped += 1
-            continue
-        _write_text(path, content)
-        created += 1
-
-    if profile.strip():
-        prof = _require_valid_profile(_load_profile_yaml(profile.strip()))
-        prof_path = tdir / "profile.yaml"
-        if (not prof_path.exists()) or force:
-            _dump_yaml(prof_path, prof)
-            typer.echo(f"Wrote {prof_path}")
-        else:
-            typer.echo(f"Skipped existing {prof_path} (use --force to overwrite)")
-
-    typer.echo(f"Initialized {tdir} (created={created}, skipped={skipped})")
+    _init_workspace(
+        tdir=tdir,
+        force=force,
+        profile_id=profile,
+        load_profile_yaml_func=_load_profile_yaml,
+        require_valid_profile_func=_require_valid_profile,
+    )
 
 
 profile_app = typer.Typer(add_completion=False)
@@ -471,21 +231,14 @@ app.add_typer(profile_app, name="profile", help="Manage profiles")
 def profile_list() -> None:
     """List built-in profiles."""
 
-    d = _profiles_dir()
-    if not d.exists():
-        typer.echo("No profiles directory")
-        raise typer.Exit(code=1)
-    profs = sorted([p.stem for p in d.glob("*.yaml")])
-    for p in profs:
-        typer.echo(p)
+    _profile_list()
 
 
 @profile_app.command("show")
 def profile_show(profile_id: str = typer.Argument(...)) -> None:
     """Show a built-in profile YAML."""
 
-    prof = _load_profile_yaml(profile_id)
-    typer.echo(yaml.safe_dump(prof, sort_keys=False, allow_unicode=False))
+    _profile_show(profile_id)
 
 
 @profile_app.command("validate")
@@ -495,83 +248,17 @@ def profile_validate(
 ) -> None:
     """Validate a profile (built-in or a profile.yaml file)."""
 
-    if profile_id is None and path is None:
-        root = _repo_root()
-        tdir = _triage_dir(root)
-        path = tdir / "profile.yaml"
-        if not path.exists():
-            raise typer.BadParameter("No profile specified and triage/profile.yaml not found")
-
-    if profile_id is not None and path is not None:
-        raise typer.BadParameter("Specify either profile_id or --path, not both")
-
-    if profile_id is not None:
-        prof = _load_profile_yaml(profile_id)
-    else:
-        assert path is not None
-        prof = _load_yaml(path)
-
-    errs = _validate_profile(prof)
-    if errs:
-        for e in errs:
-            typer.echo(f"ERROR: {e}")
-        raise typer.Exit(code=2)
-    typer.echo("OK: profile valid")
+    _profile_validate(
+        load_yaml_func=_load_yaml,
+        repo_root_func=_repo_root,
+        triage_dir_func=_triage_dir,
+        profile_id=profile_id,
+        path=path,
+    )
 
 
 round_app = typer.Typer(add_completion=False)
 app.add_typer(round_app, name="round", help="Run interactive rounds")
-
-
-def _get_profile_round_fields(profile: dict, round_id: int) -> List[str]:
-    rounds = profile.get("rounds")
-    if not isinstance(rounds, list):
-        return []
-    for r in rounds:
-        if not isinstance(r, dict):
-            continue
-        if r.get("id") == round_id:
-            fields = r.get("fields")
-            if isinstance(fields, list):
-                return [str(x) for x in fields]
-    return []
-
-
-def _profile_required_evidence(profile: dict) -> List[str]:
-    v = profile.get("required_evidence")
-    if isinstance(v, list):
-        return [str(x) for x in v]
-    return []
-
-
-def _is_missing_case_field(case: dict, key: str) -> bool:
-    if key not in case:
-        return True
-    v = case.get(key)
-    if v is None:
-        return True
-    if isinstance(v, str):
-        return not v.strip()
-    if isinstance(v, list):
-        return len(v) == 0
-    # bool/number/dict treated as present
-    return False
-
-
-def _case_set(data: dict, key: str, value) -> None:
-    if value is None:
-        return
-    data[key] = value
-
-
-def _prompt_safe(text: str, *, default: str = "", show_default: bool = True) -> str:
-    try:
-        v = str(typer.prompt(text, default=default, show_default=show_default))
-        if v == "":
-            raise typer.BadParameter("Input exhausted (empty). Provide all required lines or run interactively.")
-        return v
-    except (EOFError, click.Abort):
-        raise typer.BadParameter("Input exhausted (non-interactive stdin). Provide --no-editor input or run interactively.")
 
 
 @round_app.command("0")
@@ -588,66 +275,13 @@ def round0(
     if not tdir.exists():
         raise typer.BadParameter("triage/ does not exist. Run: triage init")
 
-    case_path = tdir / "case.yaml"
-    data = _load_yaml(case_path)
-
-    if case_id is None:
-        default = data.get("case_id") or _dt.date.today().strftime("%Y%m%d")
-        case_id = typer.prompt("case_id", default=default)
-    if title is None:
-        title = typer.prompt("title", default=str(data.get("title") or ""))
-
-    if edit:
-        current_desc = data.get("problem_description") or description or ""
-        edited = typer.edit(current_desc)
-        if edited is None:
-            edited = current_desc
-        description_final = edited.rstrip() + "\n"
-    else:
-        if description is None:
-            description = typer.prompt("problem_description", default=str(data.get("problem_description") or ""))
-        description_final = (description or "").rstrip() + "\n"
-
-    def _prompt_list(name: str, current: List[str]) -> List[str]:
-        typer.echo(f"Enter {name} one per line; blank line to finish.")
-        items: List[str] = []
-        if current:
-            typer.echo(f"Current {name}: {current}")
-        while True:
-            s = typer.prompt(name, default="", show_default=False)
-            s = s.strip()
-            if not s:
-                break
-            items.append(s)
-        return items or current
-
-    code_paths = _prompt_list("code_path", list(data.get("code_paths") or []))
-    log_paths = _prompt_list("log_path", list(data.get("log_paths") or []))
-    excluded_doc_paths = _prompt_list("excluded_doc_path", list(data.get("excluded_doc_paths") or []))
-
-    typer.echo("Enter work_done (opens editor).")
-    current_work = data.get("work_done") or ""
-    work_done = typer.edit(current_work) or current_work
-
-    data.update(
-        {
-            "case_id": case_id,
-            "title": title,
-            "problem_description": description_final,
-            "code_paths": code_paths,
-            "log_paths": log_paths,
-            "work_done": (work_done.rstrip() + "\n") if work_done else "\n",
-            "excluded_doc_paths": excluded_doc_paths,
-            "updated_at": _now_iso(),
-        }
+    _deprecated_round0(
+        tdir,
+        case_id=case_id,
+        title=title,
+        description=description,
+        edit=edit,
     )
-    if "created_at" not in data:
-        data["created_at"] = _now_iso()
-
-    _dump_yaml(case_path, data)
-    typer.echo(f"Wrote {case_path}")
-
-    typer.echo("NOTE: 'round 0' is deprecated. Use: round run 0")
 
 
 @round_app.command("1")
@@ -659,87 +293,7 @@ def round1() -> None:
     if not tdir.exists():
         raise typer.BadParameter("triage/ does not exist. Run: triage init")
 
-    case_path = tdir / "case.yaml"
-    data = _load_yaml(case_path)
-    prof = _load_active_profile(tdir)
-    default_anchors: List[str] = []
-    prof_anchors = prof.get("uart_anchors_default")
-    if isinstance(prof_anchors, list):
-        default_anchors = [str(x) for x in prof_anchors]
-
-    typer.echo("UART log format (best effort):")
-    uart_log_format = typer.prompt(
-        "uart_log_format",
-        default=str(data.get("uart_log_format") or "mixed"),
-        show_default=True,
-    ).strip()
-
-    can_enable_more_logs = typer.confirm(
-        "Can you enable more detailed UART logs (power/bt/charger)?",
-        default=bool(data.get("can_enable_more_logs") or False),
-    )
-    enable_more_logs_how = str(data.get("enable_more_logs_how") or "")
-    if can_enable_more_logs:
-        enable_more_logs_how = typer.edit(enable_more_logs_how) or enable_more_logs_how
-
-    phone_side = typer.prompt(
-        "phone_side (android/ios/none/unknown)",
-        default=str(data.get("capabilities_phone_side") or "unknown"),
-    ).strip()
-    power_measure = typer.prompt(
-        "power_measure (none/multimeter/analyzer/onboard/unknown)",
-        default=str(data.get("capabilities_power_measure") or "unknown"),
-    ).strip()
-    bt_snoop = typer.prompt(
-        "bt_snoop (yes/no/unknown)",
-        default=str(data.get("capabilities_bt_snoop") or "unknown"),
-    ).strip()
-    pmic_dump = typer.prompt(
-        "pmic_dump (yes/no/unknown)",
-        default=str(data.get("capabilities_pmic_dump") or "unknown"),
-    ).strip()
-
-    anchor_current = data.get("anchor_keywords")
-    anchors: List[str]
-    if isinstance(anchor_current, list):
-        anchors = [str(x) for x in anchor_current]
-    else:
-        anchors = []
-    if not anchors and default_anchors:
-        anchors = default_anchors[:8]
-
-    typer.echo("Enter anchor keywords (one per line; blank line to finish).")
-    typer.echo("These are used to locate high-signal windows in UART logs.")
-    if anchors:
-        typer.echo(f"Current anchors: {anchors}")
-    new_anchors: List[str] = []
-    while True:
-        s = typer.prompt("anchor", default="", show_default=False).strip()
-        if not s:
-            break
-        new_anchors.append(s)
-    if new_anchors:
-        anchors = new_anchors
-
-    data.update(
-        {
-            "uart_log_format": uart_log_format,
-            "can_enable_more_logs": bool(can_enable_more_logs),
-            "enable_more_logs_how": (enable_more_logs_how.rstrip() + "\n") if enable_more_logs_how else "",
-            "capabilities_phone_side": phone_side,
-            "capabilities_power_measure": power_measure,
-            "capabilities_bt_snoop": bt_snoop,
-            "capabilities_pmic_dump": pmic_dump,
-            "anchor_keywords": anchors,
-            "updated_at": _now_iso(),
-        }
-    )
-    if "created_at" not in data:
-        data["created_at"] = _now_iso()
-    _dump_yaml(case_path, data)
-    typer.echo(f"Wrote {case_path}")
-
-    typer.echo("NOTE: 'round 1' is deprecated. Use: round run 1")
+    _deprecated_round1(tdir)
 
 
 @round_app.command("run")
@@ -754,141 +308,7 @@ def round_run(
     if not tdir.exists():
         raise typer.BadParameter("triage/ does not exist. Run: triage init")
 
-    prof = _load_active_profile(tdir)
-    fields = _get_profile_round_fields(prof, round_id)
-    if not fields:
-        raise typer.BadParameter(f"No fields found for round {round_id}. Check triage/profile.yaml")
-
-    case_path = tdir / "case.yaml"
-    data = _load_yaml(case_path)
-
-    # Reuse existing round0/round1 implementations where possible,
-    # but allow profile to choose which prompts to include.
-    # This keeps UX consistent while making the workflow configurable.
-
-    default_anchors: List[str] = []
-    prof_anchors = prof.get("uart_anchors_default")
-    if isinstance(prof_anchors, list):
-        default_anchors = [str(x) for x in prof_anchors]
-
-    for f in fields:
-        if f == "symptom":
-            _case_set(data, "symptom", _prompt_safe("symptom", default=str(data.get("symptom") or "")))
-        elif f == "impact_scope":
-            _case_set(data, "impact_scope", _prompt_safe("impact_scope", default=str(data.get("impact_scope") or "")))
-        elif f == "firmware_version":
-            _case_set(
-                data,
-                "firmware_version",
-                _prompt_safe("firmware_version", default=str(data.get("firmware_version") or "")),
-            )
-        elif f == "hw_revision":
-            _case_set(data, "hw_revision", _prompt_safe("hw_revision", default=str(data.get("hw_revision") or "")))
-        elif f == "time_window":
-            _case_set(data, "time_window", _prompt_safe("time_window", default=str(data.get("time_window") or "")))
-        elif f == "repro_steps":
-            if no_editor:
-                v = _prompt_safe("repro_steps", default=str(data.get("repro_steps") or ""))
-                _case_set(data, "repro_steps", (str(v).rstrip() + "\n") if v else "\n")
-            else:
-                typer.echo("Enter repro_steps (opens editor).")
-                current = str(data.get("repro_steps") or "")
-                edited = typer.edit(current) or current
-                _case_set(data, "repro_steps", (edited.rstrip() + "\n") if edited else "\n")
-
-        elif f == "uart_log_format":
-            _case_set(
-                data,
-                "uart_log_format",
-                _prompt_safe("uart_log_format", default=str(data.get("uart_log_format") or "mixed")).strip(),
-            )
-        elif f == "can_enable_more_logs":
-            v = typer.confirm(
-                "Can you enable more detailed UART logs (power/bt/charger)?",
-                default=bool(data.get("can_enable_more_logs") or False),
-            )
-            _case_set(data, "can_enable_more_logs", bool(v))
-            if v:
-                if no_editor:
-                    how = _prompt_safe("enable_more_logs_how", default=str(data.get("enable_more_logs_how") or ""))
-                    _case_set(data, "enable_more_logs_how", (str(how).rstrip() + "\n") if how else "")
-                else:
-                    typer.echo("Enter enable_more_logs_how (opens editor).")
-                    cur = str(data.get("enable_more_logs_how") or "")
-                    how = typer.edit(cur) or cur
-                    _case_set(data, "enable_more_logs_how", (how.rstrip() + "\n") if how else "")
-        elif f == "capabilities_phone_side":
-            _case_set(
-                data,
-                "capabilities_phone_side",
-                _prompt_safe(
-                    "phone_side (android/ios/none/unknown)",
-                    default=str(data.get("capabilities_phone_side") or "unknown"),
-                ).strip(),
-            )
-        elif f == "capabilities_power_measure":
-            _case_set(
-                data,
-                "capabilities_power_measure",
-                _prompt_safe(
-                    "power_measure (none/multimeter/analyzer/onboard/unknown)",
-                    default=str(data.get("capabilities_power_measure") or "unknown"),
-                ).strip(),
-            )
-        elif f == "capabilities_bt_snoop":
-            _case_set(
-                data,
-                "capabilities_bt_snoop",
-                _prompt_safe(
-                    "bt_snoop (yes/no/unknown)",
-                    default=str(data.get("capabilities_bt_snoop") or "unknown"),
-                ).strip(),
-            )
-        elif f == "capabilities_pmic_dump":
-            _case_set(
-                data,
-                "capabilities_pmic_dump",
-                _prompt_safe(
-                    "pmic_dump (yes/no/unknown)",
-                    default=str(data.get("capabilities_pmic_dump") or "unknown"),
-                ).strip(),
-            )
-        elif f == "anchor_keywords":
-            anchor_current = data.get("anchor_keywords")
-            anchors: List[str]
-            if isinstance(anchor_current, list):
-                anchors = [str(x) for x in anchor_current]
-            else:
-                anchors = []
-            if not anchors and default_anchors:
-                anchors = default_anchors[:8]
-            typer.echo("Enter anchor keywords (one per line; blank line to finish).")
-            if anchors:
-                typer.echo(f"Current anchors: {anchors}")
-            new_anchors: List[str] = []
-            while True:
-                try:
-                    s = typer.prompt("anchor", default="", show_default=False)
-                except (EOFError, click.Abort):
-                    # Treat exhausted stdin as "finish anchors".
-                    break
-                s = str(s).strip()
-                if not s:
-                    break
-                new_anchors.append(s)
-            if new_anchors:
-                anchors = new_anchors
-            _case_set(data, "anchor_keywords", anchors)
-
-        else:
-            # Unknown field: store a simple string prompt to keep profile extensible.
-            _case_set(data, f, _prompt_safe(f, default=str(data.get(f) or "")))
-
-    data["updated_at"] = _now_iso()
-    if "created_at" not in data:
-        data["created_at"] = _now_iso()
-    _dump_yaml(case_path, data)
-    typer.echo(f"Wrote {case_path}")
+    _run_round(tdir, round_id=round_id, no_editor=no_editor)
 
 
 evidence_app = typer.Typer(add_completion=False)
@@ -994,15 +414,11 @@ def evidence_add(
     """Add an evidence snippet and register an EID."""
 
     etype_norm = etype.strip().lower()
-    if etype_norm not in {"log", "code", "cmd", "text"}:
-        raise typer.BadParameter("--type must be one of: log, code, cmd, text")
 
     root = _repo_root()
     tdir = _triage_dir(root)
     if not tdir.exists():
         raise typer.BadParameter("triage/ does not exist. Run: triage init")
-
-    eid = _next_eid(tdir)
 
     snippet = ""
     if content_file is not None:
@@ -1012,20 +428,7 @@ def evidence_add(
     else:
         snippet = typer.edit("") or ""
 
-    folder = tdir / "evidence" / ("cmd" if etype_norm == "text" else etype_norm)
-    fname = f"{eid}_{etype_norm}.txt"
-    out_path = folder / fname
-    header = (
-        f"EID: {eid}\n"
-        f"Type: {etype_norm}\n"
-        f"Source: {source}\n"
-        f"Captured: {_now_iso()}\n"
-        f"Note: {note}\n"
-        "---\n"
-    )
-    _write_text(out_path, header + snippet.rstrip() + "\n")
-
-    _append_evidence_index(tdir, eid=eid, etype=etype_norm, source=source, note=note)
+    eid, out_path = _add_evidence_snippet(tdir=tdir, etype=etype_norm, source=source, note=note, snippet=snippet)
     typer.echo(f"Added {eid}: {out_path}")
 
 
@@ -1067,118 +470,38 @@ def evidence_add_log(
         raise typer.BadParameter("triage/ does not exist. Run: triage init")
 
     if log_path is None:
-        case = _load_yaml(tdir / "case.yaml")
-        p = case.get("uart_log_path")
-        if isinstance(p, str) and p.strip():
-            log_path = Path(p)
+        log_path = _resolve_uart_log_path(tdir)
     if log_path is None:
         raise typer.BadParameter("--log-path is required (or attach uart_log_path via: evidence attach --uart-log <file>)")
 
     if line_start is not None or line_end is not None:
         if line_start is None or line_end is None:
             raise typer.BadParameter("--line-start and --line-end must be provided together")
-        if line_end < line_start:
-            raise typer.BadParameter("--line-end must be >= --line-start")
 
-        # Capture a fixed range as a single evidence.
-        start = int(line_start)
-        end = int(line_end)
-        out_lines: List[str] = []
-        with log_path.open("r", encoding="utf-8", errors="replace") as f:
-            for i, raw in enumerate(f, start=1):
-                if i < start:
-                    continue
-                if i > end:
-                    break
-                out_lines.append(f"{i}: {raw.rstrip()}")
-
-        if not out_lines:
-            raise typer.BadParameter("Selected line range is empty")
-
-        eid = _next_eid(tdir)
-        source = f"{log_path}:{start}-{end}"
-        out_path = tdir / "evidence" / "log" / f"{eid}_log.txt"
-        header = (
-            f"EID: {eid}\n"
-            "Type: log\n"
-            f"Source: {source}\n"
-            f"Captured: {_now_iso()}\n"
-            f"Note: {note}\n"
-            "---\n"
+        eid, out_path = _capture_log_range(
+            tdir=tdir,
+            log_path=log_path,
+            line_start=int(line_start),
+            line_end=int(line_end),
+            note=note,
         )
-        _write_text(out_path, header + "\n".join(out_lines).rstrip() + "\n")
-        _append_evidence_index(tdir, eid=eid, etype="log", source=source, note=note)
         typer.echo(f"Added {eid}: {out_path}")
         return
 
-    pattern = [p for p in pattern if p.strip()]
-    if not pattern:
-        raise typer.BadParameter("At least one --pattern is required")
-    combined = "|".join([f"(?:{p})" for p in pattern])
-    try:
-        rx = re.compile(combined)
-    except re.error as e:
-        raise typer.BadParameter(f"Invalid regex pattern: {e}")
-
-    from collections import deque
-
-    buf_before: deque[tuple[int, str]] = deque(maxlen=before)
-    captures = 0
-    line_no = 0
-
-    def _write_capture(match_line_no: int, before_lines: list[tuple[int, str]], match_line: str, after_lines: list[tuple[int, str]]) -> None:
-        nonlocal captures
-        eid = _next_eid(tdir)
-        start = before_lines[0][0] if before_lines else match_line_no
-        end = after_lines[-1][0] if after_lines else match_line_no
-        source = f"{log_path}:{start}-{end}"
-        out_path = tdir / "evidence" / "log" / f"{eid}_log.txt"
-        header = (
-            f"EID: {eid}\n"
-            "Type: log\n"
-            f"Source: {source}\n"
-            f"Captured: {_now_iso()}\n"
-            f"Note: {note}\n"
-            "Match: /" + combined + f"/ at line {match_line_no}\n"
-            "---\n"
-        )
-        body_lines: List[str] = []
-        for ln, s in before_lines:
-            body_lines.append(f"{ln}: {s}")
-        body_lines.append(f"{match_line_no}: {match_line}")
-        for ln, s in after_lines:
-            body_lines.append(f"{ln}: {s}")
-        _write_text(out_path, header + "\n".join(body_lines).rstrip() + "\n")
-        _append_evidence_index(tdir, eid=eid, etype="log", source=source, note=note)
-        captures += 1
-        typer.echo(f"Added {eid}: {out_path}")
-
-    with log_path.open("r", encoding="utf-8", errors="replace") as f:
-        it = iter(f)
-        for raw in it:
-            line_no += 1
-            line = raw.rstrip("\n")
-            if rx.search(line):
-                before_lines = list(buf_before)
-                after_lines: list[tuple[int, str]] = []
-                for i in range(after):
-                    try:
-                        nxt = next(it)
-                    except StopIteration:
-                        break
-                    line_no += 1
-                    after_lines.append((line_no, nxt.rstrip("\n")))
-                _write_capture(line_no - len(after_lines), before_lines, line, after_lines)
-                buf_before.clear()
-                for item in after_lines[-before:]:
-                    buf_before.append(item)
-                if captures >= max_matches:
-                    break
-            else:
-                buf_before.append((line_no, line))
-
-    if captures == 0:
+    created = _capture_log_windows(
+        tdir=tdir,
+        log_path=log_path,
+        pattern=list(pattern),
+        before=before,
+        after=after,
+        max_matches=max_matches,
+        note=note,
+    )
+    if not created:
         raise typer.Exit(code=1)
+    # Keep stdout stable for existing acceptance tests.
+    for eid in created:
+        typer.echo(f"Added {eid}: {tdir / 'evidence' / 'log' / f'{eid}_log.txt'}")
 
 
 def _collect_eids_from_file(path: Path) -> set[str]:
@@ -1195,98 +518,9 @@ def validate() -> None:
     if not tdir.exists():
         raise typer.BadParameter("triage/ does not exist. Run: triage init")
 
-    index_text = _read_text_if_exists(tdir / "evidence" / "index.md")
-    known_eids = set(re.findall(r"\bE\d{3}\b", index_text))
-    disk_eids = set(_evidence_files_on_disk(tdir).keys())
+    from .validate import validate_workspace
 
-    errors: List[str] = []
-
-    # Facts: ban speculation words
-    facts_path = tdir / "facts.md"
-    facts_text = _read_text_if_exists(facts_path)
-    banned = [
-        # keep this list short; add more when needed
-        "possible",
-        "probably",
-        "should",
-        "might",
-        "可能",
-        "怀疑",
-        "大概",
-        "应该",
-        "推测",
-        "估计",
-        "也许",
-    ]
-    for w in banned:
-        if w in facts_text:
-            errors.append(f"facts.md contains banned speculation word: {w}")
-            break
-
-    # Facts: each non-empty F### line must cite an EID
-    for line in facts_text.splitlines():
-        m = re.match(r"^(F\d{3}):\s*(.*)$", line)
-        if not m:
-            continue
-        payload = m.group(2).strip()
-        if not payload:
-            continue
-        if not re.search(r"\bE\d{3}\b", payload):
-            errors.append(f"facts.md fact '{m.group(1)}' cites no EID")
-            break
-
-    # Hypotheses and directions: each heading block must cite at least one known EID
-    def _check_blocks(path: Path, label: str, header_re: str) -> None:
-        text = _read_text_if_exists(path)
-        if not text.strip():
-            return
-        # Split by headings that start at line start.
-        lines = text.splitlines()
-        cur_header = None
-        cur_buf: List[str] = []
-        blocks: list[tuple[str, str]] = []
-        hpat = re.compile(header_re)
-        for line in lines:
-            m = hpat.match(line)
-            if m:
-                if cur_header is not None:
-                    blocks.append((cur_header, "\n".join(cur_buf)))
-                cur_header = m.group(0)
-                cur_buf = [line]
-            else:
-                if cur_header is not None:
-                    cur_buf.append(line)
-        if cur_header is not None:
-            blocks.append((cur_header, "\n".join(cur_buf)))
-
-        for header, body in blocks:
-            eids = set(re.findall(r"\bE\d{3}\b", body))
-            if (
-                not eids
-                and label in {"hypotheses.md", "directions.md"}
-                and (header.startswith("H001") or header.startswith("DIR-1"))
-            ):
-                # Template examples are allowed to be empty.
-                continue
-            if not eids:
-                errors.append(f"{label}: block '{header}' cites no EID")
-                continue
-            unknown = sorted(eids - known_eids)
-            if unknown:
-                errors.append(f"{label}: block '{header}' cites unknown EIDs: {', '.join(unknown)}")
-            missing_files = sorted(eids - disk_eids)
-            if missing_files:
-                errors.append(f"{label}: block '{header}' references EIDs missing evidence files: {', '.join(missing_files)}")
-
-    _check_blocks(tdir / "hypotheses.md", "hypotheses.md", r"^H\d{3}\b.*")
-    _check_blocks(tdir / "directions.md", "directions.md", r"^DIR-\d+\b.*")
-
-    if errors:
-        for e in errors:
-            typer.echo(f"ERROR: {e}")
-        raise typer.Exit(code=2)
-
-    typer.echo("OK: validation passed")
+    validate_workspace(tdir)
 
 
 facts_app = typer.Typer(add_completion=False)
@@ -1632,30 +866,9 @@ def status() -> None:
     if not tdir.exists():
         raise typer.BadParameter("triage/ does not exist. Run: triage init")
 
-    case = _load_yaml(tdir / "case.yaml")
-    title = case.get("title") or ""
-    case_id = case.get("case_id") or ""
+    from .status_view import print_status
 
-    index_text = _read_text_if_exists(tdir / "evidence" / "index.md")
-    eids = re.findall(r"\bE\d{3}\b", index_text)
-    last_eids = list(dict.fromkeys(eids))[-5:]
-
-    def _first_lines(path: Path, n: int) -> str:
-        lines = _read_text_if_exists(path).splitlines()
-        return "\n".join(lines[:n]).strip()
-
-    typer.echo(f"Case: {case_id} {title}")
-    typer.echo(f"Triage dir: {tdir}")
-    typer.echo(f"Evidence count: {len(set(eids))} (latest: {', '.join(last_eids) if last_eids else 'none'})")
-    typer.echo("")
-    typer.echo("Facts (top):")
-    typer.echo(_first_lines(tdir / "facts.md", 12) or "(empty)")
-    typer.echo("")
-    typer.echo("Hypotheses (top):")
-    typer.echo(_first_lines(tdir / "hypotheses.md", 18) or "(empty)")
-    typer.echo("")
-    typer.echo("Directions (top):")
-    typer.echo(_first_lines(tdir / "directions.md", 18) or "(empty)")
+    print_status(tdir)
 
 
 @app.command("direction-build")
@@ -1670,80 +883,7 @@ def direction_build(
     if not tdir.exists():
         raise typer.BadParameter("triage/ does not exist. Run: triage init")
 
-    directions_path = tdir / "directions.md"
-    existing = _read_text_if_exists(directions_path).strip()
-    if existing and not overwrite:
-        raise typer.BadParameter(f"{directions_path} exists. Re-run with --overwrite")
-
-    ev_index = _parse_evidence_index(tdir)
-    known = _known_eids(tdir)
-    disk = set(_evidence_files_on_disk(tdir).keys())
-
-    # Parse hypotheses blocks (very tolerant, markdown-ish).
-    hyp_text = _read_text_if_exists(tdir / "hypotheses.md")
-    if not re.search(r"^H\d{3}\b", hyp_text, flags=re.MULTILINE):
-        raise typer.BadParameter("No hypotheses found. Add evidence-backed hypotheses first.")
-    lines = hyp_text.splitlines()
-    blocks: list[dict[str, object]] = []
-    cur_id: Optional[str] = None
-    cur_lines: List[str] = []
-    for line in lines:
-        m = re.match(r"^(H\d{3})\b(.*)$", line)
-        if m:
-            if cur_id is not None:
-                blocks.append({"id": cur_id, "text": "\n".join(cur_lines)})
-            cur_id = m.group(1)
-            cur_lines = [line]
-        else:
-            if cur_id is not None:
-                cur_lines.append(line)
-    if cur_id is not None:
-        blocks.append({"id": cur_id, "text": "\n".join(cur_lines)})
-
-    scored: list[tuple[int, dict[str, object]]] = []
-    for b in blocks:
-        text = str(b["text"])
-        eids: List[str] = sorted(set(re.findall(r"\bE\d{3}\b", text)))
-        if not eids:
-            continue
-        # Evidence-backed: at least one cited EID must exist in index and have a file on disk.
-        if not any((e in known and e in disk) for e in eids):
-            continue
-        log_eids = [e for e in eids if ev_index.get(e, {}).get("type") == "log"]
-        status_open = bool(re.search(r"Status:\s*Open\b", text, flags=re.IGNORECASE))
-        score = 0
-        score += len(eids)
-        score += 2 * len(log_eids)
-        if status_open:
-            score += 2
-        scored.append((score, {"id": b["id"], "eids": eids, "text": text, "score": score}))
-
-    # Deterministic ordering: score desc, then hypothesis id asc.
-    scored.sort(key=lambda t: (-t[0], str(t[1].get("id") or "")))
-    top = [b for _, b in scored[:top_n]]
-
-    if not top:
-        raise typer.BadParameter("No evidence-backed hypotheses found. Add evidence first, then cite real EIDs in hypotheses.md.")
-
-    out_lines: List[str] = []
-    out_lines.append("# Directions")
-    out_lines.append("")
-    out_lines.append("Generated from evidence-backed hypotheses.")
-    out_lines.append("Rules: keep top 1-3 directions; each must cite EIDs.")
-    out_lines.append("")
-
-    for i, b in enumerate(top, start=1):
-        eids = list(b["eids"])  # type: ignore[assignment]
-        hid = str(b["id"])
-        out_lines.append(f"DIR-{i} (From: {hid} | Confidence: Medium)")
-        out_lines.append("Direction: <fill: component / chain / data / dependency / config>")
-        out_lines.append("Evidence chain: (" + ", ".join(eids[:5]) + (", ..." if len(eids) > 5 else "") + ")")
-        out_lines.append("Next minimal test: <one discriminative test to separate top directions>")
-        out_lines.append("Falsify if: <what observation would kill this direction>")
-        out_lines.append("")
-
-    _write_text(directions_path, "\n".join(out_lines).rstrip() + "\n")
-    typer.echo(f"Wrote {directions_path} ({len(top)} directions)")
+    _build_directions(tdir=tdir, top_n=top_n, overwrite=overwrite)
 
 
 @app.command("next")
@@ -1756,70 +896,9 @@ def next_steps() -> None:
         typer.echo("Next: init")
         raise typer.Exit(code=0)
 
-    prof_path = tdir / "profile.yaml"
-    case_path = tdir / "case.yaml"
-    if not prof_path.exists():
-        typer.echo("Next: init --profile <profile_id>")
-        raise typer.Exit(code=0)
-    if not case_path.exists():
-        typer.echo("Next: round run 0")
-        raise typer.Exit(code=0)
+    from .navigator import print_next
 
-    case = _load_yaml(case_path)
-    profile = _load_active_profile(tdir)
-
-    required0 = _get_profile_round_fields(profile, 0)
-    if required0 and any(_is_missing_case_field(case, k) for k in required0):
-        typer.echo("Next: round run 0")
-        raise typer.Exit(code=0)
-
-    required1 = _get_profile_round_fields(profile, 1)
-    if required1 and any(_is_missing_case_field(case, k) for k in required1):
-        typer.echo("Next: round run 1")
-        raise typer.Exit(code=0)
-
-    # If no evidence yet
-    index_path = tdir / "evidence" / "index.md"
-    if not index_path.exists() or not re.search(r"\bE\d{3}\b", _read_text_if_exists(index_path)):
-        required_ev = _profile_required_evidence(profile)
-        if "uart_log" in required_ev:
-            # If uart log is already attached and anchors exist, prefer hunt.
-            uart_attached = isinstance(case.get("uart_log_path"), str) and str(case.get("uart_log_path")).strip()
-            anchors = case.get("anchor_keywords")
-            anchors_ok = isinstance(anchors, list) and any(str(a).strip() for a in anchors)
-            if uart_attached and anchors_ok:
-                typer.echo("Next: evidence hunt")
-            else:
-                hint = "panic"
-                if isinstance(anchors, list) and anchors:
-                    for a in anchors:
-                        s = str(a).strip()
-                        if s:
-                            hint = s
-                            break
-                typer.echo(f"Next: evidence add-log --log-path <uart.log> --pattern {hint}")
-        else:
-            typer.echo("Next: evidence add-text --source <source> --note <fact> --content <text>")
-        raise typer.Exit(code=0)
-
-    facts_path = tdir / "facts.md"
-    facts_text = _read_text_if_exists(facts_path)
-    facts_exist = bool(re.search(r"^F\d{3}:\s*.+\bE\d{3}\b", facts_text, flags=re.MULTILINE))
-    if not facts_exist:
-        eid = _latest_eid(tdir) or "E001"
-        typer.echo(f"Next: facts add --text <fact> --evidence {eid}")
-        raise typer.Exit(code=0)
-
-    if not _has_real_hypothesis(tdir):
-        eid = _latest_eid(tdir) or "E001"
-        typer.echo(f"Next: hypotheses add --hypothesis <...> --evidence {eid}")
-        raise typer.Exit(code=0)
-
-    if not _has_generated_directions(tdir):
-        typer.echo("Next: direction-build --overwrite")
-        raise typer.Exit(code=0)
-
-    typer.echo("Next: validate")
+    print_next(tdir)
 
 
 @app.command("start")
@@ -1844,163 +923,9 @@ app.add_typer(acceptance_app, name="acceptance", help="Acceptance checks (develo
 def acceptance_run() -> None:
     """Run acceptance suite from YAML cases (workflow-driven development)."""
 
-    from typer.testing import CliRunner
+    from .acceptance.runner import run_acceptance
 
-    # Keep compatible with multiple Typer versions.
-    runner = CliRunner()
-
-    def _result_output(res) -> str:
-        # click.testing.Result provides .output; typer may also expose .stdout/.stderr
-        out = getattr(res, "output", None)
-        if isinstance(out, str) and out:
-            return out
-        stdout = getattr(res, "stdout", "")
-        try:
-            stderr = getattr(res, "stderr", "")
-        except ValueError:
-            stderr = ""
-        if isinstance(stdout, str) or isinstance(stderr, str):
-            return f"{stdout}{stderr}"
-        return ""
-
-    cases_dir = Path(__file__).resolve().parent / "acceptance" / "cases"
-    case_files = sorted(cases_dir.glob("*.yaml"))
-    if not case_files:
-        typer.echo(f"No acceptance cases found in {cases_dir}")
-        raise typer.Exit(code=2)
-
-    def _sub_vars(s: str, vars_map: dict) -> str:
-        out = s
-        for k, v in vars_map.items():
-            out = out.replace("${" + k + "}", str(v))
-        return out
-
-    def _invoke(root: Path, argv: List[str], *, input_text: Optional[str] = None) -> int:
-        res = runner.invoke(app, ["--root", str(root)] + argv, input=input_text)
-        return res.exit_code
-
-    for cf in case_files:
-        case = yaml.safe_load(cf.read_text(encoding="utf-8")) or {}
-        if not isinstance(case, dict):
-            typer.echo(f"Invalid case YAML: {cf}")
-            raise typer.Exit(code=2)
-        name = str(case.get("name") or cf.name)
-        fixtures = case.get("fixtures") or []
-        steps = case.get("steps") or []
-        if not isinstance(steps, list):
-            typer.echo(f"Invalid steps in {cf}")
-            raise typer.Exit(code=2)
-
-        with tempfile.TemporaryDirectory(prefix=f"triageflow-acc-{name}-") as td:
-            root = Path(td)
-            vars_map = {"root": str(root)}
-            last_stdout = ""
-
-            if isinstance(fixtures, list):
-                for fx in fixtures:
-                    if not isinstance(fx, dict):
-                        continue
-                    rel = str(fx.get("path") or "").strip()
-                    content = str(fx.get("content") or "")
-                    if not rel:
-                        continue
-                    p = root / rel
-                    p.parent.mkdir(parents=True, exist_ok=True)
-                    p.write_text(content, encoding="utf-8")
-
-            for step in steps:
-                if not isinstance(step, dict):
-                    continue
-                stype = str(step.get("type") or "").strip()
-                if stype == "run":
-                    args = step.get("args")
-                    if not isinstance(args, list):
-                        typer.echo(f"Invalid run args in {cf}")
-                        raise typer.Exit(code=2)
-                    argv = [_sub_vars(str(a), vars_map) for a in args]
-                    in_raw = step.get("input")
-                    input_text = None
-                    if in_raw is not None:
-                        input_text = _sub_vars(str(in_raw), vars_map)
-                    ev = step.get("expect_exit")
-                    expect_exit = int(ev) if ev is not None else 0
-                    res_run = runner.invoke(app, ["--root", str(root)] + argv, input=input_text)
-                    last_stdout = _result_output(res_run)
-                    code = res_run.exit_code
-                    if code != expect_exit:
-                        typer.echo("---- command failed ----")
-                        typer.echo(f"case: {name}")
-                        typer.echo("argv: " + " ".join(argv))
-                        typer.echo(last_stdout)
-                        if res_run.exception:
-                            typer.echo(str(res_run.exception))
-                        typer.echo(f"Case {name} failed: expected exit {expect_exit}, got {code}")
-                        raise typer.Exit(code=2)
-                elif stype == "capture":
-                    from_file = str(step.get("from_file") or "").strip()
-                    regex = str(step.get("regex") or "").strip()
-                    var = str(step.get("var") or "").strip()
-                    if not (from_file and regex and var):
-                        typer.echo(f"Invalid capture step in {cf}")
-                        raise typer.Exit(code=2)
-                    p = root / _sub_vars(from_file, vars_map)
-                    txt = p.read_text(encoding="utf-8")
-                    m = re.search(regex, txt)
-                    if not m:
-                        typer.echo(f"Case {name} capture failed: regex not found")
-                        raise typer.Exit(code=2)
-                    vars_map[var] = m.group(1)
-                elif stype == "assert_file_contains":
-                    pth = str(step.get("path") or "").strip()
-                    contains = str(step.get("contains") or "")
-                    if not pth:
-                        typer.echo(f"Invalid assert_file_contains in {cf}")
-                        raise typer.Exit(code=2)
-                    p = root / _sub_vars(pth, vars_map)
-                    txt = p.read_text(encoding="utf-8")
-                    if contains not in txt:
-                        typer.echo(f"Case {name} failed: {pth} does not contain '{contains}'")
-                        raise typer.Exit(code=2)
-                elif stype == "assert_file_not_contains":
-                    pth = str(step.get("path") or "").strip()
-                    contains = str(step.get("contains") or "")
-                    if not pth:
-                        typer.echo(f"Invalid assert_file_not_contains in {cf}")
-                        raise typer.Exit(code=2)
-                    p = root / _sub_vars(pth, vars_map)
-                    txt = p.read_text(encoding="utf-8")
-                    if contains in txt:
-                        typer.echo(f"Case {name} failed: {pth} unexpectedly contains '{contains}'")
-                        raise typer.Exit(code=2)
-                elif stype == "assert_last_stdout_contains":
-                    contains = str(step.get("contains") or "")
-                    contains = _sub_vars(contains, vars_map)
-                    if contains not in last_stdout:
-                        typer.echo(f"Case {name} failed: last stdout does not contain '{contains}'")
-                        typer.echo(last_stdout)
-                        raise typer.Exit(code=2)
-                elif stype == "delete_file":
-                    pth = str(step.get("path") or "").strip()
-                    if not pth:
-                        typer.echo(f"Invalid delete_file in {cf}")
-                        raise typer.Exit(code=2)
-                    p = root / _sub_vars(pth, vars_map)
-                    if p.exists():
-                        p.unlink()
-                elif stype == "write_file":
-                    pth = str(step.get("path") or "").strip()
-                    content = str(step.get("content") or "")
-                    if not pth:
-                        typer.echo(f"Invalid write_file in {cf}")
-                        raise typer.Exit(code=2)
-                    p = root / _sub_vars(pth, vars_map)
-                    p.parent.mkdir(parents=True, exist_ok=True)
-                    p.write_text(_sub_vars(content, vars_map), encoding="utf-8")
-                else:
-                    typer.echo(f"Unknown step type '{stype}' in {cf}")
-                    raise typer.Exit(code=2)
-
-    typer.echo("OK: acceptance suite passed")
+    run_acceptance(app)
 
 
 if __name__ == "__main__":
