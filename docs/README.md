@@ -3,6 +3,7 @@
 Start here:
 
 - `install.md`: installation options
+- `quickstart.md`: first-run MVP walkthrough
 - `testing.md`: tests and coverage
 
 ## Developer Notes

@@ -15,6 +15,9 @@ The format is based on Keep a Changelog.
 ### Changed
 - Refactor: move markdown block helpers and facts/hypotheses/directions operations out of `cli.py`.
 
+### Changed
+- Docs: improve first-run MVP experience with a 5-minute walkthrough and quickstart guide.
+
 ## 0.1.3 - 2026-03-17
 
 ### Changed
