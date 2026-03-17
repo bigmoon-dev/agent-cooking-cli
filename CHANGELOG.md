@@ -6,6 +6,11 @@ The format is based on Keep a Changelog.
 
 ## Unreleased
 
+## 0.1.3 - 2026-03-17
+
+### Changed
+- Refactor: split the large CLI implementation into focused modules (evidence, rounds, navigation, validation, acceptance runner) while preserving behavior.
+
 ## 0.1.2 - 2026-03-16
 
 ### Added
