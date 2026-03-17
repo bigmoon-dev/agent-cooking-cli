@@ -5,21 +5,33 @@ from pathlib import Path
 from typing import List, Optional
 
 import typer
-import yaml
 
 from .core import TRIAGE_DIRNAME, WORKSPACE
 from .core import dump_yaml as _dump_yaml
 from .core import load_yaml as _load_yaml
 from .core import now_iso as _now_iso
 from .core import read_text_if_exists as _read_text_if_exists
-from .core import write_text as _write_text
 from .directions import build_directions as _build_directions
+from .directions_ops import add_direction as _add_direction
+from .directions_ops import list_directions as _list_directions
+from .directions_ops import prune_directions as _prune_directions
+from .document_blocks import append_block as _append_block
+from .document_blocks import next_id as _next_id
+from .document_blocks import split_blocks as _split_blocks
 from .evidence import add_evidence_snippet as _add_evidence_snippet
 from .evidence import capture_log_range as _capture_log_range
 from .evidence import capture_log_windows as _capture_log_windows
 from .evidence import latest_eid as _latest_eid
 from .evidence import resolve_uart_log_path as _resolve_uart_log_path
+from .facts_ops import add_fact as _add_fact
+from .facts_ops import list_facts as _list_facts
+from .facts_ops import set_fact as _set_fact
+from .hypotheses_ops import add_hypothesis as _add_hypothesis
+from .hypotheses_ops import close_hypothesis as _close_hypothesis
+from .hypotheses_ops import list_hypotheses as _list_hypotheses
 from .init_workspace import init_workspace as _init_workspace
+from .profile import load_profile_yaml as _load_profile_yaml
+from .profile import require_valid_profile as _require_valid_profile
 from .profile_cli import list_profiles as _profile_list
 from .profile_cli import show_profile as _profile_show
 from .profile_cli import validate_profile as _profile_validate
@@ -52,88 +64,6 @@ def _global_options(
     WORKSPACE.set_root(_WORKSPACE_ROOT)
 
 
-def _profiles_dir() -> Path:
-    return Path(__file__).resolve().parent / "profiles"
-
-
-def _load_profile_yaml(profile_id: str) -> dict:
-    pid = profile_id.strip()
-    if not pid:
-        raise typer.BadParameter("profile_id is required")
-    p = _profiles_dir() / f"{pid}.yaml"
-    if not p.exists():
-        raise typer.BadParameter(f"Unknown profile_id '{pid}'. Expected file: {p}")
-    with p.open("r", encoding="utf-8") as f:
-        data = yaml.safe_load(f) or {}
-    if not isinstance(data, dict):
-        raise typer.BadParameter(f"Invalid profile YAML: {p}")
-    return data
-
-
-def _validate_profile(profile: dict) -> List[str]:
-    errors: List[str] = []
-    if not isinstance(profile, dict):
-        return ["profile must be a YAML mapping"]
-
-    pid = profile.get("profile_id")
-    if not isinstance(pid, str) or not pid.strip():
-        errors.append("profile_id: required non-empty string")
-
-    rounds = profile.get("rounds")
-    if not isinstance(rounds, list) or not rounds:
-        errors.append("rounds: required non-empty list")
-        return errors
-
-    seen_round_ids: set[int] = set()
-    for i, r in enumerate(rounds):
-        if not isinstance(r, dict):
-            errors.append(f"rounds[{i}]: must be a mapping")
-            continue
-        rid = r.get("id")
-        if not isinstance(rid, int):
-            errors.append(f"rounds[{i}].id: required int")
-            continue
-        if rid < 0:
-            errors.append(f"rounds[{i}].id: must be >= 0")
-        if rid in seen_round_ids:
-            errors.append(f"rounds[{i}].id: duplicate id {rid}")
-        seen_round_ids.add(rid)
-
-        fields = r.get("fields")
-        if not isinstance(fields, list) or not fields:
-            errors.append(f"rounds[{i}].fields: required non-empty list")
-            continue
-        for j, f in enumerate(fields):
-            if not isinstance(f, str) or not f.strip():
-                errors.append(f"rounds[{i}].fields[{j}]: must be non-empty string")
-
-    req_ev = profile.get("required_evidence")
-    if req_ev is not None and not isinstance(req_ev, list):
-        errors.append("required_evidence: must be a list if present")
-    if isinstance(req_ev, list):
-        for j, e in enumerate(req_ev):
-            if not isinstance(e, str) or not e.strip():
-                errors.append(f"required_evidence[{j}]: must be non-empty string")
-
-    tax = profile.get("direction_taxonomy")
-    if tax is not None and not isinstance(tax, list):
-        errors.append("direction_taxonomy: must be a list if present")
-    if isinstance(tax, list):
-        for j, t in enumerate(tax):
-            if not isinstance(t, str) or not t.strip():
-                errors.append(f"direction_taxonomy[{j}]: must be non-empty string")
-
-    return errors
-
-
-def _require_valid_profile(profile: dict) -> dict:
-    errs = _validate_profile(profile)
-    if errs:
-        msg = "Invalid profile:\n" + "\n".join(["- " + e for e in errs])
-        raise typer.BadParameter(msg)
-    return profile
-
-
 def _repo_root() -> Path:
     if _WORKSPACE_ROOT is not None:
         return _WORKSPACE_ROOT
@@ -154,56 +84,6 @@ def _has_evidence_backed_block(text: str, header_re: str, known: set, disk: set)
         if any((e in known and e in disk) for e in eids):
             return True
     return False
-
-
-def _next_id(path: Path, prefix: str) -> str:
-    text = _read_text_if_exists(path)
-    nums: list[int] = []
-    for m in re.finditer(rf"\b{re.escape(prefix)}(\d{{3}})\b", text):
-        nums.append(int(m.group(1)))
-    n = (max(nums) + 1) if nums else 1
-    return f"{prefix}{n:03d}"
-
-
-def _append_block(path: Path, block: str) -> None:
-    prev = _read_text_if_exists(path)
-    if prev and not prev.endswith("\n"):
-        prev += "\n"
-    if prev and not prev.endswith("\n\n"):
-        prev += "\n"
-    _write_text(path, prev + block.rstrip() + "\n")
-
-
-def _split_blocks(text: str, header_re: str) -> List[List[str]]:
-    lines = text.splitlines()
-    hpat = re.compile(header_re)
-    blocks: List[List[str]] = []
-    cur: List[str] = []
-    for line in lines:
-        if hpat.match(line):
-            if cur:
-                blocks.append(cur)
-            cur = [line]
-        else:
-            if cur:
-                cur.append(line)
-    if cur:
-        blocks.append(cur)
-    return blocks
-
-
-def _join_blocks(blocks: List[List[str]]) -> str:
-    out_lines: List[str] = []
-    for b in blocks:
-        if not b:
-            continue
-        out_lines.extend(b)
-        if out_lines and out_lines[-1].strip() != "":
-            out_lines.append("")
-        else:
-            out_lines.append("")
-    return "\n".join(out_lines).rstrip() + "\n"
-
 
 @app.command()
 def init(
@@ -537,32 +417,16 @@ def facts_add(
     if not tdir.exists():
         raise typer.BadParameter("triage/ does not exist. Run: triage init")
 
-    eids = [e.strip().upper() for e in evidence if e.strip()]
-    if not eids:
-        raise typer.BadParameter("At least one --evidence E### is required")
-    for e in eids:
-        if not re.fullmatch(r"E\d{3}", e):
-            raise typer.BadParameter(f"Invalid evidence id: {e}")
-    _assert_eids_exist(tdir, eids)
-
-    facts_path = tdir / "facts.md"
-    fid = _next_id(facts_path, "F")
-    line = f"{fid}: {text.strip()} ({', '.join(sorted(set(eids)))})"
-    _append_block(facts_path, line)
-    typer.echo(f"Added {fid} to {facts_path}")
+    fid = _add_fact(tdir=tdir, text=text, evidence=evidence)
+    typer.echo(f"Added {fid} to {tdir / 'facts.md'}")
 
 
 @facts_app.command("list")
 def facts_list() -> None:
     root = _repo_root()
     tdir = _triage_dir(root)
-    facts_path = tdir / "facts.md"
-    text = _read_text_if_exists(facts_path)
-    for line in text.splitlines():
-        m = re.match(r"^(F\d{3}):\s*(.*)$", line)
-        if not m:
-            continue
-        typer.echo(f"{m.group(1)}: {m.group(2)}")
+    for line in _list_facts(tdir=tdir):
+        typer.echo(line)
 
 
 @facts_app.command("set")
@@ -576,33 +440,8 @@ def facts_set(
     if not tdir.exists():
         raise typer.BadParameter("triage/ does not exist. Run: triage init")
 
-    fid = fid.strip().upper()
-    if not re.fullmatch(r"F\d{3}", fid):
-        raise typer.BadParameter("--id must be like F001")
-
-    eids = [e.strip().upper() for e in evidence if e.strip()]
-    if not eids:
-        raise typer.BadParameter("At least one --evidence E### is required")
-    for e in eids:
-        if not re.fullmatch(r"E\d{3}", e):
-            raise typer.BadParameter(f"Invalid evidence id: {e}")
-    _assert_eids_exist(tdir, eids)
-
-    facts_path = tdir / "facts.md"
-    lines = _read_text_if_exists(facts_path).splitlines()
-    updated = False
-    out: List[str] = []
-    replacement = f"{fid}: {text.strip()} ({', '.join(sorted(set(eids)))})"
-    for line in lines:
-        if re.match(rf"^{re.escape(fid)}:\b", line):
-            out.append(replacement)
-            updated = True
-        else:
-            out.append(line)
-    if not updated:
-        raise typer.BadParameter(f"Fact id not found: {fid}")
-    _write_text(facts_path, "\n".join(out).rstrip() + "\n")
-    typer.echo(f"Updated {fid} in {facts_path}")
+    _set_fact(tdir=tdir, fid=fid, text=text, evidence=evidence)
+    typer.echo(f"Updated {fid.strip().upper()} in {tdir / 'facts.md'}")
 
 
 hyp_app = typer.Typer(add_completion=False)
@@ -622,45 +461,23 @@ def hypotheses_add(
     if not tdir.exists():
         raise typer.BadParameter("triage/ does not exist. Run: triage init")
 
-    eids = [e.strip().upper() for e in evidence if e.strip()]
-    if not eids:
-        raise typer.BadParameter("At least one --evidence E### is required")
-    for e in eids:
-        if not re.fullmatch(r"E\d{3}", e):
-            raise typer.BadParameter(f"Invalid evidence id: {e}")
-    _assert_eids_exist(tdir, eids)
-
-    hyp_path = tdir / "hypotheses.md"
-    hid = _next_id(hyp_path, "H")
-    block = (
-        f"{hid} (Status: {status.strip()} | Confidence: {confidence.strip()})\n"
-        f"Hypothesis: {hypothesis.strip()}\n"
-        f"Evidence: ({', '.join(sorted(set(eids)))})\n"
-        + (f"Test: {test.strip()}\n" if test.strip() else "Test: \n")
+    hid = _add_hypothesis(
+        tdir=tdir,
+        hypothesis=hypothesis,
+        evidence=evidence,
+        test=test,
+        confidence=confidence,
+        status=status,
     )
-    _append_block(hyp_path, block)
-    typer.echo(f"Added {hid} to {hyp_path}")
+    typer.echo(f"Added {hid} to {tdir / 'hypotheses.md'}")
 
 
 @hyp_app.command("list")
 def hypotheses_list() -> None:
     root = _repo_root()
     tdir = _triage_dir(root)
-    hyp_path = tdir / "hypotheses.md"
-    text = _read_text_if_exists(hyp_path)
-    blocks = _split_blocks(text, r"^H\d{3}\b.*")
-    for b in blocks:
-        header = b[0]
-        hid_m = re.match(r"^(H\d{3})\b", header)
-        if not hid_m:
-            continue
-        hid = hid_m.group(1)
-        status_m = re.search(r"Status:\s*([^|)]+)", header)
-        conf_m = re.search(r"Confidence:\s*([^|)]+)", header)
-        status = status_m.group(1).strip() if status_m else "?"
-        conf = conf_m.group(1).strip() if conf_m else "?"
-        eids = sorted(set(re.findall(r"\bE\d{3}\b", "\n".join(b))))
-        typer.echo(f"{hid} [{status}/{conf}] EIDs: {', '.join(eids) if eids else 'none'}")
+    for line in _list_hypotheses(tdir=tdir):
+        typer.echo(line)
 
 
 @hyp_app.command("close")
@@ -670,34 +487,8 @@ def hypotheses_close(
 ) -> None:
     root = _repo_root()
     tdir = _triage_dir(root)
-    hyp_path = tdir / "hypotheses.md"
-    text = _read_text_if_exists(hyp_path)
-    blocks = _split_blocks(text, r"^H\d{3}\b.*")
-    hid = hid.strip().upper()
-    if not re.fullmatch(r"H\d{3}", hid):
-        raise typer.BadParameter("--id must be like H001")
-    found = False
-    out_blocks: List[List[str]] = []
-    for b in blocks:
-        if not b:
-            continue
-        header = b[0]
-        if header.startswith(hid + " ") or header == hid or header.startswith(hid + "("):
-            # Replace Status: ... with Status: Closed
-            new_header = re.sub(r"Status:\s*[^|)]+", "Status: Closed", header)
-            if new_header == header and "Status:" not in header:
-                new_header = header + " | Status: Closed"
-            b2 = [new_header] + b[1:]
-            if reason.strip():
-                b2.append(f"Closed because: {reason.strip()}")
-            out_blocks.append(b2)
-            found = True
-        else:
-            out_blocks.append(b)
-    if not found:
-        raise typer.BadParameter(f"Hypothesis id not found: {hid}")
-    _write_text(hyp_path, _join_blocks(out_blocks))
-    typer.echo(f"Closed {hid} in {hyp_path}")
+    _close_hypothesis(tdir=tdir, hid=hid, reason=reason)
+    typer.echo(f"Closed {hid.strip().upper()} in {tdir / 'hypotheses.md'}")
 
 
 dir_app = typer.Typer(add_completion=False)
@@ -717,51 +508,23 @@ def directions_add(
     if not tdir.exists():
         raise typer.BadParameter("triage/ does not exist. Run: triage init")
 
-    eids = [e.strip().upper() for e in evidence if e.strip()]
-    if not eids:
-        raise typer.BadParameter("At least one --evidence E### is required")
-    for e in eids:
-        if not re.fullmatch(r"E\d{3}", e):
-            raise typer.BadParameter(f"Invalid evidence id: {e}")
-    _assert_eids_exist(tdir, eids)
-
-    directions_path = tdir / "directions.md"
-    # DIR-1, DIR-2 ...
-    text = _read_text_if_exists(directions_path)
-    nums: list[int] = []
-    for m in re.finditer(r"\bDIR-(\d+)\b", text):
-        nums.append(int(m.group(1)))
-    n = (max(nums) + 1) if nums else 1
-    did = f"DIR-{n}"
-
-    block = (
-        f"{did} (Confidence: {confidence.strip()})\n"
-        f"Direction: {direction.strip()}\n"
-        f"Evidence chain: ({', '.join(sorted(set(eids)))})\n"
-        + (f"Next minimal test: {next_test.strip()}\n" if next_test.strip() else "Next minimal test: \n")
-        + (f"Falsify if: {falsify_if.strip()}\n" if falsify_if.strip() else "Falsify if: \n")
+    did = _add_direction(
+        tdir=tdir,
+        direction=direction,
+        evidence=evidence,
+        next_test=next_test,
+        falsify_if=falsify_if,
+        confidence=confidence,
     )
-    _append_block(directions_path, block)
-    typer.echo(f"Added {did} to {directions_path}")
+    typer.echo(f"Added {did} to {tdir / 'directions.md'}")
 
 
 @dir_app.command("list")
 def directions_list() -> None:
     root = _repo_root()
     tdir = _triage_dir(root)
-    directions_path = tdir / "directions.md"
-    text = _read_text_if_exists(directions_path)
-    blocks = _split_blocks(text, r"^DIR-\d+\b.*")
-    for b in blocks:
-        header = b[0]
-        mid = re.match(r"^(DIR-\d+)\b", header)
-        if not mid:
-            continue
-        did = mid.group(1)
-        conf_m = re.search(r"Confidence:\s*([^|)]+)", header)
-        conf = conf_m.group(1).strip() if conf_m else "?"
-        eids = sorted(set(re.findall(r"\bE\d{3}\b", "\n".join(b))))
-        typer.echo(f"{did} [{conf}] EIDs: {', '.join(eids) if eids else 'none'}")
+    for line in _list_directions(tdir=tdir):
+        typer.echo(line)
 
 
 @dir_app.command("prune")
@@ -770,14 +533,8 @@ def directions_prune(
 ) -> None:
     root = _repo_root()
     tdir = _triage_dir(root)
-    directions_path = tdir / "directions.md"
-    text = _read_text_if_exists(directions_path)
-    blocks = _split_blocks(text, r"^DIR-\d+\b.*")
-    if not blocks:
-        raise typer.BadParameter("No direction blocks found")
-    kept = blocks[:top_n]
-    _write_text(directions_path, _join_blocks(kept))
-    typer.echo(f"Pruned directions to top {top_n} in {directions_path}")
+    _prune_directions(tdir=tdir, top_n=top_n)
+    typer.echo(f"Pruned directions to top {top_n} in {tdir / 'directions.md'}")
 
 
 exp_app = typer.Typer(add_completion=False)
