@@ -66,35 +66,37 @@ def _create_evidence_record(
     """
 
     lock_path = _evidence_lock_path(tdir)
-    with workspace_lock(lock_path):
-        eid = next_eid(tdir)
-        if out_path.name.startswith("E"):
-            # Caller may have already formatted filename; ensure it matches allocated eid.
-            out_path = out_path.with_name(re.sub(r"^E\d{3}", eid, out_path.name))
+    try:
+        with workspace_lock(lock_path):
+            eid = next_eid(tdir)
+            if out_path.name.startswith("E"):
+                # Caller may have already formatted filename; ensure it matches allocated eid.
+                out_path = out_path.with_name(re.sub(r"^E\d{3}", eid, out_path.name))
 
-        header = (
-            f"EID: {eid}\n"
-            f"Type: {etype_norm}\n"
-            f"Source: {source}\n"
-            f"Captured: {now_iso()}\n"
-            f"Note: {note}\n"
-            "---\n"
-        )
-        try:
+            header = (
+                f"EID: {eid}\n"
+                f"Type: {etype_norm}\n"
+                f"Source: {source}\n"
+                f"Captured: {now_iso()}\n"
+                f"Note: {note}\n"
+                "---\n"
+            )
             atomic_write_text(out_path, header + body_text.rstrip() + "\n")
-        except Exception:
-            raise
 
-        try:
-            append_evidence_index(tdir, eid=eid, etype=etype_norm, source=source, note=note)
-        except Exception:
             try:
-                out_path.unlink()
-            except OSError:
-                pass
-            raise
+                append_evidence_index(tdir, eid=eid, etype=etype_norm, source=source, note=note)
+            except Exception:
+                try:
+                    out_path.unlink()
+                except OSError:
+                    pass
+                raise
 
-        return eid, out_path
+            return eid, out_path
+    except TimeoutError as e:
+        raise typer.BadParameter(
+            f"Workspace is busy writing evidence. If this persists, remove stale lock file: {lock_path}"
+        ) from e
 
 
 def resolve_uart_log_path(tdir: Path) -> Optional[Path]:

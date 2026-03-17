@@ -68,10 +68,13 @@ def atomic_write_text(path: Path, content: str) -> None:
             os.fsync(f.fileno())
         tmp_path.replace(path)
         # Best-effort directory fsync to persist rename.
-        try:
-            dfd = os.open(str(parent), os.O_DIRECTORY)
-        except OSError:
-            dfd = None
+        o_directory = getattr(os, "O_DIRECTORY", None)
+        dfd = None
+        if isinstance(o_directory, int):
+            try:
+                dfd = os.open(str(parent), os.O_RDONLY | o_directory)
+            except OSError:
+                dfd = None
         if dfd is not None:
             try:
                 os.fsync(dfd)
