@@ -6,34 +6,17 @@ from pathlib import Path
 import typer
 
 from .core import load_yaml, read_text_if_exists
+from .document_blocks import split_blocks
 from .evidence import latest_eid
 from .profile import get_round_fields, load_active_profile, profile_required_evidence
 from .validate_rules import evidence_files_on_disk, known_eids
-
-
-def _split_blocks(text: str, header_re: str) -> list[list[str]]:
-    lines = text.splitlines()
-    hpat = re.compile(header_re)
-    blocks: list[list[str]] = []
-    cur: list[str] = []
-    for line in lines:
-        if hpat.match(line):
-            if cur:
-                blocks.append(cur)
-            cur = [line]
-        else:
-            if cur:
-                cur.append(line)
-    if cur:
-        blocks.append(cur)
-    return blocks
 
 
 def _has_real_hypothesis(tdir: Path) -> bool:
     known = known_eids(tdir)
     disk = set(evidence_files_on_disk(tdir).keys())
     hyp_text = read_text_if_exists(tdir / "hypotheses.md")
-    blocks = _split_blocks(hyp_text, r"^H\d{3}\b.*")
+    blocks = split_blocks(hyp_text, r"^H\d{3}\b.*")
     for b in blocks:
         body = "\n".join(b)
         eids = set(re.findall(r"\bE\d{3}\b", body))
@@ -49,7 +32,7 @@ def _has_generated_directions(tdir: Path) -> bool:
     known = known_eids(tdir)
     disk = set(evidence_files_on_disk(tdir).keys())
     dtext = read_text_if_exists(tdir / "directions.md")
-    blocks = _split_blocks(dtext, r"^DIR-\d+\b.*")
+    blocks = split_blocks(dtext, r"^DIR-\d+\b.*")
     for b in blocks:
         header = b[0] if b else ""
         body = "\n".join(b)

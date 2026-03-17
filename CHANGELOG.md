@@ -12,6 +12,9 @@ The format is based on Keep a Changelog.
 ### Fixed
 - Evidence writes: add atomic file writes and a lightweight lock to reduce EID allocation races and partial evidence/index updates.
 
+### Changed
+- Refactor: move markdown block helpers and facts/hypotheses/directions operations out of `cli.py`.
+
 ## 0.1.3 - 2026-03-17
 
 ### Changed
