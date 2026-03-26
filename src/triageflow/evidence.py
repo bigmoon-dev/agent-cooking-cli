@@ -7,7 +7,7 @@ from typing import List, Optional, Tuple
 
 import typer
 
-from .core import atomic_write_text, load_yaml, now_iso, read_text_if_exists
+from .core import atomic_write_text, emit, load_yaml, now_iso, read_text_if_exists
 from .workspace_lock import workspace_lock
 
 
@@ -92,11 +92,14 @@ def _create_evidence_record(
                     pass
                 raise
 
-            return eid, out_path
+            result = (eid, out_path)
     except TimeoutError as e:
         raise typer.BadParameter(
             f"Workspace is busy writing evidence. If this persists, remove stale lock file: {lock_path}"
         ) from e
+
+    emit("evidence.added", eid=result[0], path=result[1], etype=etype_norm, source=source)
+    return result
 
 
 def resolve_uart_log_path(tdir: Path) -> Optional[Path]:

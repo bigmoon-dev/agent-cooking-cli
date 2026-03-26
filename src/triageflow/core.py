@@ -4,7 +4,7 @@ import datetime as _dt
 import os
 import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import typer
 import yaml
@@ -102,3 +102,38 @@ def dump_yaml(path: Path, data: dict) -> None:
     ensure_parent(path)
     with path.open("w", encoding="utf-8") as f:
         yaml.safe_dump(data, f, sort_keys=False, allow_unicode=False)
+
+
+_event_hooks: Dict[str, List[Callable[..., None]]] = {}
+_hook_error_handler: Optional[Callable[[str, List[Tuple[Callable[..., None], Exception]]], None]] = None
+
+
+def register_hook(event: str, fn: Callable[..., None]) -> None:
+    """Register an event callback. Enterprise extensions use this."""
+
+    _event_hooks.setdefault(event, []).append(fn)
+
+
+def set_hook_error_handler(
+    fn: Callable[[str, List[Tuple[Callable[..., None], Exception]]], None],
+) -> None:
+    """Set a handler for hook callback failures."""
+
+    global _hook_error_handler
+    _hook_error_handler = fn
+
+
+def emit(event: str, **ctx: Any) -> None:
+    """Fire event callbacks. Never raises -- core flow is not interrupted."""
+
+    errors: List[Tuple[Callable[..., None], Exception]] = []
+    for fn in _event_hooks.get(event, []):
+        try:
+            fn(**ctx)
+        except Exception as exc:
+            errors.append((fn, exc))
+    if errors and _hook_error_handler is not None:
+        try:
+            _hook_error_handler(event, errors)
+        except Exception:
+            pass

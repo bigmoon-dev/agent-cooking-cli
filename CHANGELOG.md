@@ -6,6 +6,20 @@ The format is based on Keep a Changelog.
 
 ## Unreleased
 
+## 0.1.5 - 2026-03-26
+
+### Added
+- Event hook system: `register_hook()`, `emit()`, `set_hook_error_handler()` for enterprise extensions.
+- Events emitted: `evidence.added`, `validate.passed`, `validate.failed`, `fact.added`, `hypothesis.added`, `hypothesis.closed`.
+- Unit tests for the hook system in `tests/test_hooks.py`.
+
+### Fixed
+- `set_fact()` now uses atomic writes to prevent partial file corruption.
+- `close_hypothesis()` now uses atomic writes for consistency.
+
+### Changed
+- `evidence.added` now fires outside the workspace lock to avoid blocking concurrent writes.
+
 ## 0.1.4 - 2026-03-17
 
 ### Changed

@@ -6,6 +6,7 @@ from typing import List
 
 import typer
 
+from .core import atomic_write_text, emit
 from .document_blocks import append_block, next_id
 from .validate_rules import assert_eids_exist
 
@@ -23,6 +24,7 @@ def add_fact(*, tdir: Path, text: str, evidence: List[str]) -> str:
     fid = next_id(facts_path, "F")
     line = f"{fid}: {text.strip()} ({', '.join(sorted(set(eids)))})"
     append_block(facts_path, line)
+    emit("fact.added", fid=fid, text=text.strip(), evidence=sorted(set(eids)))
     return fid
 
 
@@ -64,4 +66,4 @@ def set_fact(*, tdir: Path, fid: str, text: str, evidence: List[str]) -> None:
             out.append(line)
     if not updated:
         raise typer.BadParameter(f"Fact id not found: {fid_n}")
-    facts_path.write_text("\n".join(out).rstrip() + "\n", encoding="utf-8")
+    atomic_write_text(facts_path, "\n".join(out).rstrip() + "\n")

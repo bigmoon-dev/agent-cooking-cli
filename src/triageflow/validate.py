@@ -6,14 +6,13 @@ from typing import List
 
 import typer
 
-from .core import read_text_if_exists
+from .core import emit, read_text_if_exists
 from .validate_rules import evidence_files_on_disk, known_eids
 
 
 def validate_workspace(tdir: Path) -> None:
     """Validate hard rules (evidence citations, no speculation in facts)."""
 
-    index_text = read_text_if_exists(tdir / "evidence" / "index.md")
     known = known_eids(tdir)
     disk = set(evidence_files_on_disk(tdir).keys())
 
@@ -103,10 +102,10 @@ def validate_workspace(tdir: Path) -> None:
     _check_blocks(tdir / "directions.md", "directions.md", r"^DIR-\d+\b.*")
 
     if errors:
+        emit("validate.failed", tdir=tdir, errors=errors)
         for e in errors:
             typer.echo(f"ERROR: {e}")
         raise typer.Exit(code=2)
 
-    # Keep behavior: if index.md exists but empty, still OK.
-    _ = index_text
+    emit("validate.passed", tdir=tdir)
     typer.echo("OK: validation passed")

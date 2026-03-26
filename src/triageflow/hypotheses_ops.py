@@ -6,6 +6,7 @@ from typing import List
 
 import typer
 
+from .core import atomic_write_text, emit
 from .document_blocks import append_block, join_blocks, next_id, split_blocks
 from .validate_rules import assert_eids_exist
 
@@ -36,6 +37,7 @@ def add_hypothesis(
         + (f"Test: {test.strip()}\n" if test.strip() else "Test: \n")
     )
     append_block(hyp_path, block)
+    emit("hypothesis.added", hid=hid, hypothesis=hypothesis.strip(), evidence=sorted(set(eids)))
     return hid
 
 
@@ -89,4 +91,5 @@ def close_hypothesis(*, tdir: Path, hid: str, reason: str) -> None:
 
     if not found:
         raise typer.BadParameter(f"Hypothesis id not found: {hid_n}")
-    hyp_path.write_text(join_blocks(out_blocks), encoding="utf-8")
+    atomic_write_text(hyp_path, join_blocks(out_blocks))
+    emit("hypothesis.closed", hid=hid_n, reason=reason.strip())
