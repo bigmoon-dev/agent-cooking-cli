@@ -8,8 +8,14 @@ from .core import read_text_if_exists, write_text
 
 
 def split_blocks(text: str, header_re: str) -> List[List[str]]:
+    """Split text into blocks delimited by lines matching *header_re*.
+
+    Lines before the first header match are preserved as a preamble block
+    (the first element of the returned list, which may be empty).
+    """
     lines = text.splitlines()
     hpat = re.compile(header_re)
+    preamble: List[str] = []
     blocks: List[List[str]] = []
     cur: List[str] = []
     for line in lines:
@@ -20,9 +26,11 @@ def split_blocks(text: str, header_re: str) -> List[List[str]]:
         else:
             if cur:
                 cur.append(line)
+            else:
+                preamble.append(line)
     if cur:
         blocks.append(cur)
-    return blocks
+    return [preamble] + blocks
 
 
 def join_blocks(blocks: List[List[str]]) -> str:

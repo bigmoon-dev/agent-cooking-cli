@@ -51,7 +51,7 @@ def list_directions(*, tdir: Path) -> List[str]:
     text = directions_path.read_text(encoding="utf-8") if directions_path.exists() else ""
     blocks = split_blocks(text, r"^DIR-\d+\b.*")
     out: List[str] = []
-    for b in blocks:
+    for b in blocks[1:]:  # skip preamble at index 0
         if not b:
             continue
         header = b[0]
@@ -70,7 +70,10 @@ def prune_directions(*, tdir: Path, top_n: int) -> None:
     directions_path = tdir / "directions.md"
     text = directions_path.read_text(encoding="utf-8") if directions_path.exists() else ""
     blocks = split_blocks(text, r"^DIR-\d+\b.*")
-    if not blocks:
+    # blocks[0] is preamble, blocks[1:] are direction blocks
+    preamble = blocks[0] if blocks else []
+    dir_blocks = blocks[1:]
+    if not dir_blocks:
         raise typer.BadParameter("No direction blocks found")
-    kept = blocks[:top_n]
+    kept = [preamble] + dir_blocks[:top_n]
     directions_path.write_text(join_blocks(kept), encoding="utf-8")

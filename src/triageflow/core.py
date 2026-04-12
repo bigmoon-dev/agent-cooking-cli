@@ -92,16 +92,20 @@ def load_yaml(path: Path) -> dict:
     if not path.exists():
         return {}
     with path.open("r", encoding="utf-8") as f:
-        data = yaml.safe_load(f) or {}
+        try:
+            data = yaml.safe_load(f)
+        except yaml.YAMLError as e:
+            raise typer.BadParameter(f"Corrupt YAML in {path}: {e}") from e
+    if data is None:
+        return {}
     if not isinstance(data, dict):
         raise typer.BadParameter(f"Expected mapping YAML in {path}")
     return data
 
 
 def dump_yaml(path: Path, data: dict) -> None:
-    ensure_parent(path)
-    with path.open("w", encoding="utf-8") as f:
-        yaml.safe_dump(data, f, sort_keys=False, allow_unicode=False)
+    content = yaml.safe_dump(data, sort_keys=False, allow_unicode=True)
+    atomic_write_text(path, content)
 
 
 _event_hooks: Dict[str, List[Callable[..., None]]] = {}

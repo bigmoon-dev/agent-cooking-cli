@@ -172,8 +172,6 @@ def profile_validate_command(
         root = repo_root_func()
         tdir = triage_dir_func(root)
         path = tdir / "profile.yaml"
-        if path is None:
-            raise typer.BadParameter("No profile specified and triage/profile.yaml not found")
         if not path.exists():
             raise typer.BadParameter("No profile specified and triage/profile.yaml not found")
 

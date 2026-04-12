@@ -11,9 +11,11 @@ H002 (Status: Open | Confidence: Low)
 Hypothesis: b
 """
     blocks = split_blocks(text, r"^H\d{3}\b.*")
-    assert len(blocks) == 2
-    assert blocks[0][0].startswith("H001")
-    assert blocks[1][0].startswith("H002")
+    # blocks[0] is the preamble (# Header), blocks[1:] are the actual blocks
+    assert len(blocks) == 3
+    assert blocks[0][0] == "# Header"  # preamble preserved
+    assert blocks[1][0].startswith("H001")
+    assert blocks[2][0].startswith("H002")
 
 
 def test_join_blocks_round_trip_keeps_headers():

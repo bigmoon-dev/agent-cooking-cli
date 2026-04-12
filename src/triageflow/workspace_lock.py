@@ -38,10 +38,16 @@ def workspace_lock(
                 pid = None
 
         if pid is None:
+            # PID unparseable — only reap if lock is stale by mtime
             try:
-                lock_path.unlink()
+                age = time.time() - lock_path.stat().st_mtime
             except OSError:
-                pass
+                return
+            if age >= stale_after_s:
+                try:
+                    lock_path.unlink()
+                except OSError:
+                    pass
             return
 
         if os.name == "posix":
@@ -96,5 +102,5 @@ def workspace_lock(
         finally:
             try:
                 lock_path.unlink()
-            except FileNotFoundError:
+            except OSError:
                 pass

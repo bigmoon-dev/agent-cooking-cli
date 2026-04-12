@@ -36,9 +36,13 @@ def validate_workspace(tdir: Path) -> None:
         "也许",
     ]
     for w in banned:
-        if w in facts_text:
-            errors.append(f"facts.md contains banned speculation word: {w}")
-            break
+        # Use word-boundary for ASCII words; substring match for CJK
+        if w.isascii():
+            if re.search(rf"\b{re.escape(w)}\b", facts_text):
+                errors.append(f"facts.md contains banned speculation word: {w}")
+        else:
+            if w in facts_text:
+                errors.append(f"facts.md contains banned speculation word: {w}")
 
     # Facts: each non-empty F### line must cite an EID
     for line in facts_text.splitlines():
@@ -50,7 +54,6 @@ def validate_workspace(tdir: Path) -> None:
             continue
         if not re.search(r"\bE\d{3}\b", payload):
             errors.append(f"facts.md fact '{m.group(1)}' cites no EID")
-            break
 
     # Hypotheses and directions: each heading block must cite at least one known EID
     def _check_blocks(path: Path, label: str, header_re: str) -> None:
@@ -79,13 +82,15 @@ def validate_workspace(tdir: Path) -> None:
 
         for header, body in blocks:
             eids = set(re.findall(r"\bE\d{3}\b", body))
-            if (
-                not eids
-                and label in {"hypotheses.md", "directions.md"}
-                and (header.startswith("H001") or header.startswith("DIR-1"))
-            ):
-                # Template examples are allowed to be empty.
-                continue
+            if not eids and label in {"hypotheses.md", "directions.md"}:
+                # Detect template blocks by empty content fields
+                is_template = False
+                if label == "hypotheses.md" and re.search(r"^Hypothesis:\s*$", body, re.MULTILINE):
+                    is_template = True
+                if label == "directions.md" and re.search(r"^Direction:\s*$", body, re.MULTILINE):
+                    is_template = True
+                if is_template:
+                    continue
             if not eids:
                 errors.append(f"{label}: block '{header}' cites no EID")
                 continue

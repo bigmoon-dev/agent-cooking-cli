@@ -8,8 +8,9 @@ from triageflow.document_blocks import append_block, join_blocks, next_id, split
 def test_split_join_roundtrip() -> None:
     text = "H001\nline\n\nH002\nx\n"
     blocks = split_blocks(text, r"^H\d{3}\b.*")
-    assert blocks[0][0].startswith("H001")
-    assert blocks[1][0].startswith("H002")
+    # blocks[0] is preamble (empty here), blocks[1:] are actual blocks
+    assert blocks[1][0].startswith("H001")
+    assert blocks[2][0].startswith("H002")
     out = join_blocks(blocks)
     assert "H001" in out and "H002" in out
 

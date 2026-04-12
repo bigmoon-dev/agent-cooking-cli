@@ -46,7 +46,7 @@ def list_hypotheses(*, tdir: Path) -> List[str]:
     text = hyp_path.read_text(encoding="utf-8") if hyp_path.exists() else ""
     blocks = split_blocks(text, r"^H\d{3}\b.*")
     out: List[str] = []
-    for b in blocks:
+    for b in blocks[1:]:  # skip preamble at index 0
         if not b:
             continue
         header = b[0]
@@ -71,9 +71,11 @@ def close_hypothesis(*, tdir: Path, hid: str, reason: str) -> None:
     if not re.fullmatch(r"H\d{3}", hid_n):
         raise typer.BadParameter("--id must be like H001")
 
+    # blocks[0] is the preamble (header/rules); preserve it
+    preamble = blocks[0] if blocks else []
     found = False
-    out_blocks: List[List[str]] = []
-    for b in blocks:
+    out_blocks: List[List[str]] = [preamble]
+    for b in blocks[1:]:
         if not b:
             continue
         header = b[0]
