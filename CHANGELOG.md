@@ -6,6 +6,31 @@ The format is based on Keep a Changelog.
 
 ## Unreleased
 
+## 0.1.6 - 2026-04-12
+
+### Fixed
+- `dump_yaml` now uses atomic writes (`atomic_write_text`) to prevent `case.yaml` corruption when the process is interrupted mid-write.
+- `dump_yaml` now uses `allow_unicode=True` so CJK characters are written correctly instead of being escaped to `\uXXXX`.
+- `validate`: banned-word detection now uses word-boundary regex (`\b`) for ASCII words, eliminating false positives (e.g. "shoulder" no longer triggers "should").
+- `validate`: removed early `break` in banned-word and fact-citation loops — all errors are now reported in a single pass instead of stopping after the first.
+- `validate`: template block exemption is now based on empty content fields (`Hypothesis: `, `Direction: `) instead of matching by ID (`H001`, `DIR-1`), so user-created H001/DIR-1 entries are correctly validated.
+- `split_blocks` now preserves the file preamble (header and rules text) as `blocks[0]`, fixing a bug where `prune_directions` and `close_hypothesis` permanently deleted the `# Directions` / `# Hypotheses` header and rules.
+- `load_yaml` now raises a clear `typer.BadParameter` on corrupt YAML instead of silently returning an empty dict.
+- `workspace_lock`: when the lock file PID is unparseable (empty/corrupt), stale detection now checks mtime age instead of unconditionally deleting the lock.
+- `workspace_lock`: lock file cleanup now catches `OSError` (not just `FileNotFoundError`), preventing orphaned lock files on permission errors.
+- Removed dead code: impossible `if path is None` branch in `profile.py` after a `Path / str` operation.
+
+### Added
+- `set_profile_loader()` / `get_profile_loader()` API in `profile.py` for downstream code to register custom profile loaders without monkey-patching.
+- `navigator.print_next()` now respects `workflow_state.yaml` active phase — recommends `validate` when workspace is in implement/review/deliver/validate phase.
+- 27 new tests: `test_navigator.py` (12), `test_directions_build.py` (8), `test_workspace_lock.py` (7). Test count 31 → 58.
+- CI: `bandit` (SAST) and `pip-audit` (dependency audit) security scanning.
+
+### Changed
+- CI: all GitHub Actions pinned to immutable commit SHAs instead of mutable tags.
+- CI: release workflow now requires CI to pass before publishing (`needs: ci` gate).
+- CI: release build uses isolated environment (removed `--no-isolation` flag).
+
 ## 0.1.5 - 2026-03-26
 
 ### Added
