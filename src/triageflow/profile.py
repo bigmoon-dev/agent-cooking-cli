@@ -12,7 +12,31 @@ def profiles_dir() -> Path:
     return Path(__file__).resolve().parent / "profiles"
 
 
-def load_profile_yaml(profile_id: str) -> dict:
+# ---------------------------------------------------------------------------
+# Extensible profile loader: allows enterprise/plugin code to register an
+# alternative loader via set_profile_loader() instead of monkey-patching.
+# ---------------------------------------------------------------------------
+_custom_profile_loader: Optional[Callable[[str], dict]] = None
+
+
+def set_profile_loader(loader: Optional[Callable[[str], dict]]) -> None:
+    """Register a custom profile loader.
+
+    When set, ``load_profile_yaml`` delegates to *loader* first.
+    If *loader* raises ``FileNotFoundError``, the built-in loader is
+    used as fallback.  Pass ``None`` to restore default behaviour.
+    """
+    global _custom_profile_loader
+    _custom_profile_loader = loader
+
+
+def get_profile_loader() -> Optional[Callable[[str], dict]]:
+    """Return the currently registered custom profile loader, or ``None``."""
+    return _custom_profile_loader
+
+
+def _builtin_load_profile_yaml(profile_id: str) -> dict:
+    """Built-in profile loader: reads from the bundled profiles/ directory."""
     pid = profile_id.strip()
     if not pid:
         raise typer.BadParameter("profile_id is required")
@@ -24,6 +48,19 @@ def load_profile_yaml(profile_id: str) -> dict:
     if not isinstance(data, dict):
         raise typer.BadParameter(f"Invalid profile YAML: {p}")
     return data
+
+
+def load_profile_yaml(profile_id: str) -> dict:
+    """Load a profile by ID — delegates to custom loader if registered."""
+    pid = profile_id.strip()
+    if not pid:
+        raise typer.BadParameter("profile_id is required")
+    if _custom_profile_loader is not None:
+        try:
+            return _custom_profile_loader(pid)
+        except FileNotFoundError:
+            pass  # fallback to built-in
+    return _builtin_load_profile_yaml(profile_id)
 
 
 def validate_profile(profile: dict) -> List[str]:
