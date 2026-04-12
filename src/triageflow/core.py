@@ -139,5 +139,5 @@ def emit(event: str, **ctx: Any) -> None:
     if errors and _hook_error_handler is not None:
         try:
             _hook_error_handler(event, errors)
-        except Exception:
+        except Exception:  # nosec B110
             pass

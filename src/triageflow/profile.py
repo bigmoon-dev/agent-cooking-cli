@@ -181,7 +181,7 @@ def profile_validate_command(
     if profile_id is not None:
         prof = load_profile_yaml(profile_id)
     else:
-        assert path is not None
+        assert path is not None  # nosec B101
         prof = load_yaml_func(path)
 
     errs = validate_profile(prof)
