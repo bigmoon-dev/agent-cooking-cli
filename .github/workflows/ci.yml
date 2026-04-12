@@ -37,7 +37,7 @@ jobs:
 
       - name: Unit tests
         run: |
-          python -m pytest -q
+          python -m pytest -q --cov=triageflow --cov-fail-under=55
 
       - name: Acceptance
         run: |
