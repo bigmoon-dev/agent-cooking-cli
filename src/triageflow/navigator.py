@@ -58,6 +58,17 @@ def _is_missing_case_field(case: dict, key: str) -> bool:
     return False
 
 
+def _active_workflow_phase(tdir: Path) -> str:
+    state_path = tdir / "workflow_state.yaml"
+    if not state_path.exists():
+        return ""
+    try:
+        data = load_yaml(state_path)
+        return (data or {}).get("current_phase", "")
+    except Exception:
+        return ""
+
+
 def print_next(tdir: Path) -> None:
     """Print the recommended golden-path next command based on workspace state."""
 
@@ -72,6 +83,11 @@ def print_next(tdir: Path) -> None:
 
     case = load_yaml(case_path)
     profile = load_active_profile(triage_dir=tdir, load_yaml_func=load_yaml)
+
+    active_phase = _active_workflow_phase(tdir)
+    if active_phase in ("implement", "review", "deliver", "validate"):
+        typer.echo("Next: validate")
+        raise typer.Exit(code=0)
 
     required0 = get_round_fields(profile, 0)
     if required0 and any(_is_missing_case_field(case, k) for k in required0):
