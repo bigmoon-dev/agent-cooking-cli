@@ -105,6 +105,9 @@ def build_directions(*, tdir: Path, top_n: int, overwrite: bool) -> None:
         out_lines.append("Next minimal test: <one discriminative test to separate top directions>")
         out_lines.append("Falsify if: <what observation would kill this direction>")
         out_lines.append("")
+        out_lines.append("**Deliverables**:")
+        out_lines.append("- <describe the concrete deliverable for this direction>")
+        out_lines.append("")
 
     write_text(directions_path, "\n".join(out_lines).rstrip() + "\n")
     typer.echo(f"Wrote {directions_path} ({len(top)} directions)")
