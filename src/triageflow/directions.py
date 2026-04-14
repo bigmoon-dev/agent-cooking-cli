@@ -29,13 +29,31 @@ def parse_evidence_index(tdir: Path) -> dict[str, dict[str, str]]:
     return info
 
 
-def build_directions(*, tdir: Path, top_n: int, overwrite: bool) -> None:
+def build_directions(*, tdir: Path, top_n: int, overwrite: bool,
+                     force_overwrite: bool = False) -> None:
     """Build Top directions from evidence-backed hypotheses (MVP scoring)."""
 
     directions_path = tdir / "directions.md"
     existing = read_text_if_exists(directions_path).strip()
     if existing and not overwrite:
         raise typer.BadParameter(f"{directions_path} exists. Re-run with --overwrite")
+
+    # DIR-2: Guard against overwriting design-imported directions
+    if overwrite and not force_overwrite:
+        case_path = tdir / "case.yaml"
+        if case_path.exists():
+            import yaml as _yaml
+
+            case_data = _yaml.safe_load(case_path.read_text(encoding="utf-8")) or {}
+            if case_data.get("_directions_imported_from_design"):
+                raise typer.BadParameter(
+                    "directions.md was imported from design workspace ({}). "
+                    "Overwriting would destroy design details including Scope, "
+                    "review notes, and blocked_by relationships. "
+                    "Use --force-overwrite to override (NOT RECOMMENDED).".format(
+                        case_data.get("_design_source_path", "unknown")
+                    )
+                )
 
     ev_index = parse_evidence_index(tdir)
     known = known_eids(tdir)

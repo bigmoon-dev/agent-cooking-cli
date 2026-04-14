@@ -632,6 +632,10 @@ def status() -> None:
 def direction_build(
     top_n: int = typer.Option(3, min=1, max=5, help="Number of directions to keep"),
     overwrite: bool = typer.Option(False, help="Overwrite directions.md if it exists"),
+    force_overwrite: bool = typer.Option(
+        False, "--force-overwrite",
+        help="Force overwrite even for design-imported directions (NOT RECOMMENDED)",
+    ),
 ) -> None:
     """Build Top directions from evidence-backed hypotheses (MVP scoring)."""
 
@@ -640,7 +644,8 @@ def direction_build(
     if not tdir.exists():
         raise typer.BadParameter("triage/ does not exist. Run: triage init")
 
-    _build_directions(tdir=tdir, top_n=top_n, overwrite=overwrite)
+    _build_directions(tdir=tdir, top_n=top_n, overwrite=overwrite,
+                      force_overwrite=force_overwrite)
 
 
 @app.command("next")
