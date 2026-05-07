@@ -123,7 +123,7 @@ def init_workspace(
             typer.echo(f"Skipped existing {prof_path} (use --force to overwrite)")
 
     claude_md_content: str | None = None
-    if expert_path:
+    if isinstance(expert_path, str) and expert_path:
         if profile_data is None:
             typer.echo("Warning: --expert requires --profile to generate CLAUDE.md")
         else:
