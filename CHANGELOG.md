@@ -6,6 +6,13 @@ The format is based on Keep a Changelog.
 
 ## Unreleased
 
+## 0.2.0 - 2026-05-07
+
+### Added
+- `kitchen init --expert <path>` — inject dianoia-distilled expert constraints into generated CLAUDE.md.
+- New `expert.py` module: loads dianoia `profile.yaml`, extracts `sections` as constraints, generates a CLAUDE.md with expert knowledge injected as authoritative guardrails.
+- Generated CLAUDE.md includes: workflow profile summary, expert constraints grouped by domain layer (identity/goals/methods/values), golden path, hard rules, and minimal command reference.
+
 ## 0.1.6 - 2026-04-12
 
 ### Fixed

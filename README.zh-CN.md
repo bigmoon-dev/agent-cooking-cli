@@ -114,6 +114,18 @@ python -m triageflow profile list
 - `design_system_v1`：软件设计/架构决策
 - `product_definition_v1`：产品定义/需求决策
 
+## 专家约束（dianoia 集成）
+
+使用 [dianoia](https://github.com/bigmoon-dev/dianoia-ai) 蒸馏出的专家 profile，将领域知识注入工作流。
+专家 profile 作为全程监督者——其约束作用于工作流的每一步决策，而非仅在审查阶段。
+
+```bash
+kitchen init --profile design_system_v1 --expert ~/dianoia-experts/ai-product-architect
+```
+
+这会在工作区根目录生成 `CLAUDE.md`，其中包含按领域层（身份、目标、方法、价值观）分组的全部专家约束。
+AI agent 将这些约束视为权威护栏：每条假设、每个方向、每项决策都必须符合专家的知识。
+
 ## 开发与测试
 
 ```bash

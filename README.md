@@ -218,6 +218,18 @@ Current profiles:
 - `design_system_v1`: software design decisions
 - `product_definition_v1`: product definition decisions
 
+## Expert Constraints (dianoia integration)
+
+Use a [dianoia](https://github.com/bigmoon-dev/dianoia-ai) distilled expert profile to inject domain expertise into the workflow.
+The expert profile acts as a continuous supervisor — its constraints apply to every decision throughout the workflow, not just during review.
+
+```bash
+kitchen init --profile design_system_v1 --expert ~/dianoia-experts/ai-product-architect
+```
+
+This generates a `CLAUDE.md` in the workspace root with all expert constraints grouped by domain layer (identity, goals, methods, values).
+The AI agent reads these as authoritative guardrails: every hypothesis, direction, and decision must respect the expert's knowledge.
+
 ## For Agents
 
 See `AGENTS.md`.

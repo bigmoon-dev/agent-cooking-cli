@@ -7,6 +7,7 @@ from typing import Callable
 import typer
 
 from .core import dump_yaml, write_text
+from .expert import extract_constraints, generate_claude_md, load_expert_profile
 
 
 def infer_triage_templates() -> dict[str, str]:
@@ -90,6 +91,8 @@ def init_workspace(
     profile_id: str,
     load_profile_yaml_func: Callable[[str], dict],
     require_valid_profile_func: Callable[[dict], dict],
+    expert_path: str = "",
+    workspace_root: str = "",
 ) -> None:
     """Initialize triage/ workspace with templates."""
 
@@ -109,13 +112,42 @@ def init_workspace(
         write_text(path, content)
         created += 1
 
+    profile_data: dict | None = None
     if profile_id.strip():
-        prof = require_valid_profile_func(load_profile_yaml_func(profile_id.strip()))
+        profile_data = require_valid_profile_func(load_profile_yaml_func(profile_id.strip()))
         prof_path = tdir / "profile.yaml"
         if (not prof_path.exists()) or force:
-            dump_yaml(prof_path, prof)
+            dump_yaml(prof_path, profile_data)
             typer.echo(f"Wrote {prof_path}")
         else:
             typer.echo(f"Skipped existing {prof_path} (use --force to overwrite)")
+
+    claude_md_content: str | None = None
+    if expert_path:
+        if profile_data is None:
+            typer.echo("Warning: --expert requires --profile to generate CLAUDE.md")
+        else:
+            expert = load_expert_profile(expert_path)
+            if expert is not None:
+                constraints = extract_constraints(expert)
+                if not constraints:
+                    typer.echo(f"Warning: no constraints found in expert profile at {expert_path}")
+                else:
+                    claude_md_content = generate_claude_md(
+                        profile_id=profile_id.strip(),
+                        description=profile_data.get("description", ""),
+                        constraints=constraints,
+                        workspace_root=workspace_root,
+                    )
+                    typer.echo(f"Loaded expert profile with {len(constraints)} constraints")
+            else:
+                typer.echo(f"Warning: no profile.yaml found in {expert_path}")
+
+    claude_md_path = tdir.parent / "CLAUDE.md"
+    if claude_md_content and ((not claude_md_path.exists()) or force):
+        write_text(claude_md_path, claude_md_content)
+        typer.echo(f"Wrote {claude_md_path}")
+    elif claude_md_path.exists() and not force:
+        typer.echo(f"Skipped existing {claude_md_path} (use --force to overwrite)")
 
     typer.echo(f"Initialized {tdir} (created={created}, skipped={skipped})")

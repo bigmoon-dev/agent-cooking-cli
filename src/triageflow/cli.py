@@ -89,6 +89,7 @@ def _has_evidence_backed_block(text: str, header_re: str, known: set, disk: set)
 def init(
     force: bool = typer.Option(False, help="Overwrite existing templates"),
     profile: str = typer.Option("", help="Optional profile_id (e.g. embedded_system_v1)"),
+    expert: str = typer.Option("", help="Path to dianoia expert profile directory (e.g. ~/dianoia-experts/ai-product-architect)"),
 ) -> None:
     """Initialize triage/ workspace with templates."""
 
@@ -100,6 +101,8 @@ def init(
         profile_id=profile,
         load_profile_yaml_func=_load_profile_yaml,
         require_valid_profile_func=_require_valid_profile,
+        expert_path=expert,
+        workspace_root=str(root),
     )
 
 
